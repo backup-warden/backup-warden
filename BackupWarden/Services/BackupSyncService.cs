@@ -25,35 +25,17 @@ namespace BackupWarden.Services
 
             foreach (var sourcePath in sourcePaths)
             {
-                if (Directory.Exists(sourcePath))
+                if (sourcePath.EndsWith('\\') || sourcePath.EndsWith('/'))
                 {
-                    foreach (var file in Directory.EnumerateFiles(sourcePath, "*", SearchOption.AllDirectories))
+                    var dirPath = sourcePath.TrimEnd('\\', '/');
+                    if (Directory.Exists(dirPath))
                     {
-                        var relative = Path.GetRelativePath(sourcePath, file);
-                        var destFile = Path.Combine(destinationRoot, relative);
-                        Directory.CreateDirectory(Path.GetDirectoryName(destFile)!);
-
-                        if (!File.Exists(destFile) ||
-                            new FileInfo(file).Length != new FileInfo(destFile).Length ||
-                            File.GetLastWriteTimeUtc(file) != File.GetLastWriteTimeUtc(destFile))
-                        {
-                            await CopyFileAsync(file, destFile);
-                        }
-                        sourceFiles.Add(destFile);
+                        await SyncDirectoryAsync(dirPath, destinationRoot, sourceFiles);
                     }
                 }
                 else if (File.Exists(sourcePath))
                 {
-                    var fileName = Path.GetFileName(sourcePath);
-                    var destFile = Path.Combine(destinationRoot, fileName);
-
-                    if (!File.Exists(destFile) ||
-                        new FileInfo(sourcePath).Length != new FileInfo(destFile).Length ||
-                        File.GetLastWriteTimeUtc(sourcePath) != File.GetLastWriteTimeUtc(destFile))
-                    {
-                        await CopyFileAsync(sourcePath, destFile);
-                    }
-                    sourceFiles.Add(destFile);
+                    await SyncFileAsync(sourcePath, destinationRoot, sourceFiles);
                 }
             }
 
@@ -65,6 +47,36 @@ namespace BackupWarden.Services
                     await Task.Run(() => File.Delete(destFile));
                 }
             }
+        }
+
+        private static async Task SyncDirectoryAsync(string sourceDir, string destinationRoot, HashSet<string> sourceFiles)
+        {
+            foreach (var file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(sourceDir, file);
+                var destFile = Path.Combine(destinationRoot, relative);
+                await SyncFileInternalAsync(file, destFile, sourceFiles);
+            }
+        }
+
+        private static async Task SyncFileAsync(string sourceFile, string destinationRoot, HashSet<string> sourceFiles)
+        {
+            var relative = Path.GetFileName(sourceFile);
+            var destFile = Path.Combine(destinationRoot, relative);
+            await SyncFileInternalAsync(sourceFile, destFile, sourceFiles);
+        }
+
+        private static async Task SyncFileInternalAsync(string sourceFile, string destFile, HashSet<string> sourceFiles)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(destFile)!);
+
+            if (!File.Exists(destFile) ||
+                new FileInfo(sourceFile).Length != new FileInfo(destFile).Length ||
+                File.GetLastWriteTimeUtc(sourceFile) != File.GetLastWriteTimeUtc(destFile))
+            {
+                await CopyFileAsync(sourceFile, destFile);
+            }
+            sourceFiles.Add(destFile);
         }
 
         private static async Task CopyFileAsync(string sourceFile, string destFile)

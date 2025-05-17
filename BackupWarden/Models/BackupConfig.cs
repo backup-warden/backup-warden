@@ -13,6 +13,7 @@ namespace BackupWarden.Models
 
     public class AppConfig
     {
+        public string Id { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public List<string> Paths { get; set; } = [];
         public string? Key { get; set; }

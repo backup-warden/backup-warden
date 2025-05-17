@@ -4,6 +4,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace BackupWarden.ViewModels
@@ -12,33 +14,53 @@ namespace BackupWarden.ViewModels
     {
         public ObservableCollection<string> YamlFilePaths { get; } = [];
 
-        private BackupConfig? backupConfig;
+        private string? _destinationFolder;
+
+        public string? DestinationFolder
+        {
+            get => _destinationFolder;
+            set => SetProperty(ref _destinationFolder, value);
+        }
 
         private readonly IYamlConfigService _yamlConfigService;
         private readonly IAppSettingsService _appSettingsService;
+        private readonly IBackupSyncService _backupSyncService;
         private MainWindow? mainWindow;
 
         public IRelayCommand AddYamlFileCommand { get; }
-        public IRelayCommand LoadConfigCommand { get; }
+        public IRelayCommand SyncCommand { get; }
+        public IRelayCommand BrowseDestinationFolderCommand { get; }
 
-        public MainViewModel(IAppSettingsService appSettingsService, IYamlConfigService yamlConfigService)
+        public MainViewModel(
+            IAppSettingsService appSettingsService,
+            IYamlConfigService yamlConfigService,
+            IBackupSyncService backupSyncService)
         {
             _yamlConfigService = yamlConfigService;
             _appSettingsService = appSettingsService;
+            _backupSyncService = backupSyncService;
 
-            AddYamlFileCommand = new RelayCommand(async () => await AddYamlFileAsync(), CanAddYamlFile);
-            LoadConfigCommand = new RelayCommand(LoadConfig, CanLoadConfig);
-            LoadYamlFilePaths();
+            AddYamlFileCommand = new RelayCommand(async () => await AddYamlFileAsync(), IsMainWindowSetted);
+            BrowseDestinationFolderCommand = new RelayCommand(async () => await BrowseDestinationFolderAsync(), IsMainWindowSetted);
+            SyncCommand = new RelayCommand(async () => await SyncAsync(), CanSync);
+
+            LoadAppSettings();
+
         }
 
-        private void LoadYamlFilePaths()
+        private void LoadAppSettings()
         {
+            DestinationFolder = _appSettingsService.LoadDestinationFolder();
             foreach (var path in _appSettingsService.LoadYamlFilePaths())
             {
                 YamlFilePaths.Add(path);
             }
 
-            YamlFilePaths.CollectionChanged += (s, e) => _appSettingsService.SaveYamlFilePaths(YamlFilePaths);
+            YamlFilePaths.CollectionChanged += (s, e) =>
+            {
+                _appSettingsService.SaveYamlFilePaths(YamlFilePaths);
+                SyncCommand.NotifyCanExecuteChanged();
+            };
         }
 
         public void SetMainWindow(MainWindow window)
@@ -70,26 +92,55 @@ namespace BackupWarden.ViewModels
             }
         }
 
-        private void LoadConfig()
+        private bool IsMainWindowSetted()
         {
-            foreach (var path in YamlFilePaths)
+            return mainWindow is not null;
+        }
+
+        private bool CanSync()
+        {
+            return YamlFilePaths.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
+        }
+
+        private async Task BrowseDestinationFolderAsync()
+        {
+            if (mainWindow is null)
+                return;
+
+            var picker = new Windows.Storage.Pickers.FolderPicker();
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(mainWindow);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+            picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
+            picker.FileTypeFilter.Add("*");
+
+            var folder = await picker.PickSingleFolderAsync();
+            if (folder is not null)
             {
-                if (!string.IsNullOrEmpty(path))
-                {
-                    // You may want to merge or handle multiple configs
-                    backupConfig = _yamlConfigService.LoadConfig(path);
-                }
+                DestinationFolder = folder.Path;
+                _appSettingsService.SaveDestinationFolder(folder.Path);
             }
         }
 
-        private bool CanLoadConfig()
+        private async Task SyncAsync()
         {
-            return YamlFilePaths.Count > 0;
-        }
+            // Load all configs
+            var configs = YamlFilePaths
+                .Where(File.Exists)
+                .Select(path => _yamlConfigService.LoadConfig(path))
+                .Where(cfg => cfg is not null);
 
-        private bool CanAddYamlFile()
-        {
-            return mainWindow is not null;
+            foreach (var config in configs)
+            {
+                foreach (var app in config.Apps)
+                {
+                    if (string.IsNullOrWhiteSpace(app.Id))
+                    {
+                        continue;
+                    }
+                    var appDest = Path.Combine(DestinationFolder!, app.Id);
+                    await _backupSyncService.SyncAsync(app.Paths, appDest);
+                }
+            }
         }
     }
 }
