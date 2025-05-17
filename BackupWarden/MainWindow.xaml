@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="utf-8"?>
 <Window
     x:Class="BackupWarden.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -13,7 +12,23 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid>
-
+    <Grid Padding="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <TextBlock Text="YAML Configuration Files" FontWeight="Bold" FontSize="18" Margin="0,0,0,12"/>
+        <StackPanel Grid.Row="1" Orientation="Vertical" Spacing="8">
+            <ItemsControl ItemsSource="{x:Bind ViewModel.YamlFilePaths, Mode=OneWay}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <TextBox Text="{Binding}" IsReadOnly="True" Margin="0,0,0,4"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Button Content="+" Width="32" Height="32" Command="{x:Bind ViewModel.AddYamlFileCommand}" HorizontalAlignment="Left"/>
+        </StackPanel>
+        <Button Grid.Row="2" Content="Load Config" Command="{x:Bind ViewModel.LoadConfigCommand}" HorizontalAlignment="Right" Margin="0,12,0,0"/>
     </Grid>
 </Window>
