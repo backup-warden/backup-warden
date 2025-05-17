@@ -19,7 +19,11 @@ namespace BackupWarden.ViewModels
         public string? DestinationFolder
         {
             get => _destinationFolder;
-            set => SetProperty(ref _destinationFolder, value);
+            set
+            {
+                SetProperty(ref _destinationFolder, value);
+                SyncCommand.NotifyCanExecuteChanged();
+            }
         }
 
         private readonly IYamlConfigService _yamlConfigService;
@@ -66,6 +70,8 @@ namespace BackupWarden.ViewModels
         public void SetMainWindow(MainWindow window)
         {
             mainWindow = window;
+            AddYamlFileCommand.NotifyCanExecuteChanged();
+            BrowseDestinationFolderCommand.NotifyCanExecuteChanged();
         }
 
         private async Task AddYamlFileAsync()
