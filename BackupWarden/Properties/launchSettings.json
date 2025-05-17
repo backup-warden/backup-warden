@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "BackupWarden (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "BackupWarden (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
