@@ -1,5 +1,9 @@
 using BackupWarden.ViewModels;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
+using System;
+using Windows.Graphics;
+using Microsoft.UI.Windowing;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -14,6 +18,17 @@ namespace BackupWarden
         public MainWindow(MainViewModel mainViewModel)
         {
             InitializeComponent();
+            ExtendsContentIntoTitleBar = true;
+            SetTitleBar(AppTitleBar);
+
+            IntPtr hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+
+            var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
+
+            AppWindow appWindow = AppWindow.GetFromWindowId(windowId);
+
+            appWindow.Resize(new SizeInt32(1280, 720)); 
+
             ViewModel = mainViewModel;
             ViewModel.SetMainWindow(this);
         }
