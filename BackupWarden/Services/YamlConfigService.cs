@@ -10,9 +10,14 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace BackupWarden.Services
 {
-    public static class YamlConfigService
+    public interface IYamlConfigService
     {
-        public static BackupConfig LoadConfig(string path)
+        BackupConfig LoadConfig(string path);
+    }
+
+    public class YamlConfigService : IYamlConfigService
+    {
+        public BackupConfig LoadConfig(string path)
         {
             var deserializer = new DeserializerBuilder()
                 .WithNamingConvention(CamelCaseNamingConvention.Instance)

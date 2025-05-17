@@ -11,10 +11,11 @@ namespace BackupWarden
     /// </summary>
     public sealed partial class MainWindow : Window
     {
-        public MainWindow()
+        public MainWindow(MainViewModel mainViewModel)
         {
-            this.InitializeComponent();
-            ViewModel = new MainViewModel(this);
+            InitializeComponent();
+            ViewModel = mainViewModel;
+            ViewModel.SetMainWindow(this);
         }
         public MainViewModel ViewModel { get; }
     }

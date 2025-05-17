@@ -13,21 +13,43 @@ namespace BackupWarden.ViewModels
         public ObservableCollection<string> YamlFilePaths { get; } = [];
 
         private BackupConfig? backupConfig;
-        private readonly MainWindow _mainWindow;
+
+        private readonly IYamlConfigService _yamlConfigService;
+        private readonly IAppSettingsService _appSettingsService;
+        private MainWindow? mainWindow;
+
         public IRelayCommand AddYamlFileCommand { get; }
         public IRelayCommand LoadConfigCommand { get; }
 
-        public MainViewModel(MainWindow mainWindow)
+        public MainViewModel(IAppSettingsService appSettingsService, IYamlConfigService yamlConfigService)
         {
-            AddYamlFileCommand = new RelayCommand(async () => await AddYamlFileAsync());
+            _yamlConfigService = yamlConfigService;
+            _appSettingsService = appSettingsService;
+
+            AddYamlFileCommand = new RelayCommand(async () => await AddYamlFileAsync(), CanAddYamlFile);
             LoadConfigCommand = new RelayCommand(LoadConfig, CanLoadConfig);
-            _mainWindow = mainWindow;
+            LoadYamlFilePaths();
+        }
+
+        private void LoadYamlFilePaths()
+        {
+            foreach (var path in _appSettingsService.LoadYamlFilePaths())
+            {
+                YamlFilePaths.Add(path);
+            }
+
+            YamlFilePaths.CollectionChanged += (s, e) => _appSettingsService.SaveYamlFilePaths(YamlFilePaths);
+        }
+
+        public void SetMainWindow(MainWindow window)
+        {
+            mainWindow = window;
         }
 
         private async Task AddYamlFileAsync()
         {
             var picker = new Windows.Storage.Pickers.FileOpenPicker();
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_mainWindow);
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(mainWindow);
             WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
 
             picker.FileTypeFilter.Add(".yaml");
@@ -36,7 +58,7 @@ namespace BackupWarden.ViewModels
             picker.ViewMode = Windows.Storage.Pickers.PickerViewMode.List;
 
             var files = await picker.PickMultipleFilesAsync();
-            if (files != null)
+            if (files is not null)
             {
                 foreach (var file in files)
                 {
@@ -55,7 +77,7 @@ namespace BackupWarden.ViewModels
                 if (!string.IsNullOrEmpty(path))
                 {
                     // You may want to merge or handle multiple configs
-                    backupConfig = YamlConfigService.LoadConfig(path);
+                    backupConfig = _yamlConfigService.LoadConfig(path);
                 }
             }
         }
@@ -63,6 +85,11 @@ namespace BackupWarden.ViewModels
         private bool CanLoadConfig()
         {
             return YamlFilePaths.Count > 0;
+        }
+
+        private bool CanAddYamlFile()
+        {
+            return mainWindow is not null;
         }
     }
 }

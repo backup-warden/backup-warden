@@ -27,7 +27,7 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <Button Content="+" Width="32" Height="32" Command="{x:Bind ViewModel.AddYamlFileCommand}" HorizontalAlignment="Left"/>
+            <Button x:Name="AddYamlButton" Content="+" Width="32" Height="32" Command="{x:Bind ViewModel.AddYamlFileCommand}" HorizontalAlignment="Left"/>
         </StackPanel>
         <Button Grid.Row="2" Content="Load Config" Command="{x:Bind ViewModel.LoadConfigCommand}" HorizontalAlignment="Right" Margin="0,12,0,0"/>
     </Grid>
