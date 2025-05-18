@@ -15,11 +15,10 @@ namespace BackupWarden
     /// </summary>
     public sealed partial class MainWindow : Window
     {
-        public MainWindow(MainViewModel mainViewModel)
+        public MainWindow()
         {
             InitializeComponent();
             ExtendsContentIntoTitleBar = true;
-            SetTitleBar(AppTitleBar);
 
             IntPtr hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
 
@@ -28,10 +27,6 @@ namespace BackupWarden
             AppWindow appWindow = AppWindow.GetFromWindowId(windowId);
 
             appWindow.Resize(new SizeInt32(1280, 720)); 
-
-            ViewModel = mainViewModel;
-            ViewModel.SetMainWindow(this);
         }
-        public MainViewModel ViewModel { get; }
     }
 }

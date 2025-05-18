@@ -1,5 +1,6 @@
 ﻿using BackupWarden.Services;
 using BackupWarden.ViewModels;
+using BackupWarden.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using System;
@@ -14,6 +15,8 @@ namespace BackupWarden
     /// </summary>
     public partial class App : Application
     {
+        public static Window MainWindow { get; } = new MainWindow();
+
         private readonly IServiceProvider _services;
 
         public App()
@@ -26,8 +29,9 @@ namespace BackupWarden
             services.AddSingleton<IBackupSyncService, BackupSyncService>();
 
             // Register MainWindow and ViewModel
-            services.AddSingleton<MainWindow>();
             services.AddTransient<MainViewModel>();
+            services.AddSingleton<MainPage>();
+
 
             this._services = services.BuildServiceProvider();
             InitializeComponent();
@@ -35,8 +39,9 @@ namespace BackupWarden
 
         protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
         {
-            var window = _services.GetRequiredService<MainWindow>();
-            window.Activate();
+            var mainPage = _services.GetRequiredService<MainPage>();
+            MainWindow.Content = mainPage;
+            MainWindow.Activate();
         }
     }
 }

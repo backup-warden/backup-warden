@@ -50,11 +50,10 @@ namespace BackupWarden.ViewModels
         private readonly IYamlConfigService _yamlConfigService;
         private readonly IAppSettingsService _appSettingsService;
         private readonly IBackupSyncService _backupSyncService;
-        private MainWindow? mainWindow;
 
-        public IRelayCommand AddYamlFileCommand { get; }
-        public IRelayCommand SyncCommand { get; }
-        public IRelayCommand BrowseDestinationFolderCommand { get; }
+        public IAsyncRelayCommand AddYamlFileCommand { get; }
+        public IAsyncRelayCommand SyncCommand { get; }
+        public IAsyncRelayCommand BrowseDestinationFolderCommand { get; }
 
         public MainViewModel(
             IAppSettingsService appSettingsService,
@@ -65,9 +64,9 @@ namespace BackupWarden.ViewModels
             _appSettingsService = appSettingsService;
             _backupSyncService = backupSyncService;
 
-            AddYamlFileCommand = new RelayCommand(async () => await AddYamlFileAsync(), IsMainWindowSetted);
-            BrowseDestinationFolderCommand = new RelayCommand(async () => await BrowseDestinationFolderAsync(), IsMainWindowSetted);
-            SyncCommand = new RelayCommand(async () => await SyncAsync(), CanSync);
+            AddYamlFileCommand = new AsyncRelayCommand(AddYamlFileAsync);
+            BrowseDestinationFolderCommand = new AsyncRelayCommand(BrowseDestinationFolderAsync);
+            SyncCommand = new AsyncRelayCommand(SyncAsync, CanSync);
 
             LoadAppSettings();
 
@@ -88,17 +87,10 @@ namespace BackupWarden.ViewModels
             };
         }
 
-        public void SetMainWindow(MainWindow window)
-        {
-            mainWindow = window;
-            AddYamlFileCommand.NotifyCanExecuteChanged();
-            BrowseDestinationFolderCommand.NotifyCanExecuteChanged();
-        }
-
         private async Task AddYamlFileAsync()
         {
             var picker = new Windows.Storage.Pickers.FileOpenPicker();
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(mainWindow);
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
             WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
 
             picker.FileTypeFilter.Add(".yaml");
@@ -119,11 +111,6 @@ namespace BackupWarden.ViewModels
             }
         }
 
-        private bool IsMainWindowSetted()
-        {
-            return mainWindow is not null;
-        }
-
         private bool CanSync()
         {
             return !IsSyncing && YamlFilePaths.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
@@ -131,11 +118,8 @@ namespace BackupWarden.ViewModels
 
         private async Task BrowseDestinationFolderAsync()
         {
-            if (mainWindow is null)
-                return;
-
             var picker = new Windows.Storage.Pickers.FolderPicker();
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(mainWindow);
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
             WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
             picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
             picker.FileTypeFilter.Add("*");
