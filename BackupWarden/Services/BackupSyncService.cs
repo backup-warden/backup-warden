@@ -1,7 +1,9 @@
-﻿using Polly;
+﻿using BackupWarden.Utils;
+using Polly;
 using Polly.Retry;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -23,37 +25,61 @@ namespace BackupWarden.Services
         {
             var sourceFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var sourcePath in sourcePaths)
+            var expandedPaths = sourcePaths.Select(SpecialFolderUtil.ExpandSpecialFolders).ToList();
+
+            try
             {
-                if (sourcePath.EndsWith('\\') || sourcePath.EndsWith('/'))
+                foreach (var sourcePath in expandedPaths)
                 {
-                    var dirPath = sourcePath.TrimEnd('\\', '/');
-                    if (Directory.Exists(dirPath))
+                    if (sourcePath.EndsWith('\\') || sourcePath.EndsWith('/'))
                     {
-                        await SyncDirectoryAsync(dirPath, destinationRoot, sourceFiles);
+                        var dirPath = sourcePath.TrimEnd('\\', '/');
+                        if (Directory.Exists(dirPath))
+                        {
+                            await SyncDirectoryAsync(dirPath, destinationRoot, sourceFiles);
+                        }
+                    }
+                    else if (File.Exists(sourcePath))
+                    {
+                        await SyncFileAsync(sourcePath, destinationRoot, sourceFiles);
                     }
                 }
-                else if (File.Exists(sourcePath))
-                {
-                    await SyncFileAsync(sourcePath, destinationRoot, sourceFiles);
-                }
-            }
 
-            // Delete files in destination that are not in source
-            foreach (var destFile in Directory.EnumerateFiles(destinationRoot, "*", SearchOption.AllDirectories))
-            {
-                if (!sourceFiles.Contains(destFile))
+                // Delete files in destination that are not in source
+                if (Directory.Exists(destinationRoot))
                 {
-                    await Task.Run(() => File.Delete(destFile));
+                    foreach (var destFile in Directory.EnumerateFiles(destinationRoot, "*", SearchOption.AllDirectories))
+                    {
+                        if (!sourceFiles.Contains(destFile))
+                        {
+                            await Task.Run(() => File.Delete(destFile));
+                        }
+                    }
+
+                    // Delete empty directories (bottom-up by depth)
+                    foreach (var dir in Directory.EnumerateDirectories(destinationRoot, "*", SearchOption.AllDirectories)
+                        .OrderByDescending(d => d.Count(c => c == Path.DirectorySeparatorChar)))
+                    {
+                        if (!Directory.EnumerateFileSystemEntries(dir).Any())
+                        {
+                            await Task.Run(() => Directory.Delete(dir));
+                        }
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex.ToString());
+                throw;
+            }
+            
         }
 
         private static async Task SyncDirectoryAsync(string sourceDir, string destinationRoot, HashSet<string> sourceFiles)
         {
             foreach (var file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
             {
-                var relative = Path.GetRelativePath(sourceDir, file);
+                var relative = GetDriveLetterRelativePath(file);
                 var destFile = Path.Combine(destinationRoot, relative);
                 await SyncFileInternalAsync(file, destFile, sourceFiles);
             }
@@ -61,7 +87,7 @@ namespace BackupWarden.Services
 
         private static async Task SyncFileAsync(string sourceFile, string destinationRoot, HashSet<string> sourceFiles)
         {
-            var relative = Path.GetFileName(sourceFile);
+            var relative = GetDriveLetterRelativePath(sourceFile);
             var destFile = Path.Combine(destinationRoot, relative);
             await SyncFileInternalAsync(sourceFile, destFile, sourceFiles);
         }
@@ -77,6 +103,18 @@ namespace BackupWarden.Services
                 await CopyFileAsync(sourceFile, destFile);
             }
             sourceFiles.Add(destFile);
+        }
+
+        private static string GetDriveLetterRelativePath(string fullPath)
+        {
+            var root = Path.GetPathRoot(fullPath);
+            if (string.IsNullOrEmpty(root) || root.Length < 2)
+                return fullPath;
+
+            // Remove the colon and backslash (e.g., "C:\") and prepend the drive letter with a separator
+            var driveLetter = root[0].ToString();
+            var rest = fullPath[root.Length..];
+            return Path.Combine(driveLetter, rest);
         }
 
         private static async Task CopyFileAsync(string sourceFile, string destFile)

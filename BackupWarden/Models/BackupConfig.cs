@@ -18,5 +18,6 @@ namespace BackupWarden.Models
         public List<string> Paths { get; set; } = [];
         public string? Key { get; set; }
         public string? Account { get; set; }
+        public string? Mods { get; set; }
     }
 }
