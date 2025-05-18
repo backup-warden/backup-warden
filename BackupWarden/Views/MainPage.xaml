@@ -3,12 +3,16 @@
     x:Class="BackupWarden.Views.MainPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="using:BackupWarden.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:BackupWarden.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:viewmodels="using:BackupWarden.ViewModels"
     d:DataContext="{d:DesignInstance Type=viewmodels:MainViewModel}"
     mc:Ignorable="d">
+    <Page.Resources>
+        <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </Page.Resources>
     <Grid Padding="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -81,7 +85,7 @@
                 Width="150"
                 Maximum="100"
                 Minimum="0"
-                Visibility="Visible"
+                Visibility="{x:Bind ViewModel.IsSyncing, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
                 Value="{x:Bind ViewModel.SyncProgress, Mode=OneWay}" />
         </StackPanel>
     </Grid>
