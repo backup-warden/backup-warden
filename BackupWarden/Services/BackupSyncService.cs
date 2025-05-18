@@ -83,7 +83,7 @@ namespace BackupWarden.Services
                     {
                         if (!sourceFiles.Contains(destFile))
                         {
-                            await Task.Run(() => File.Delete(destFile));
+                            await RetryPolicy.ExecuteAsync(() => Task.Run(() => File.Delete(destFile)));
                         }
                     }
 
@@ -93,7 +93,7 @@ namespace BackupWarden.Services
                     {
                         if (!Directory.EnumerateFileSystemEntries(dir).Any())
                         {
-                            await Task.Run(() => Directory.Delete(dir));
+                            await RetryPolicy.ExecuteAsync(() => Task.Run(() => Directory.Delete(dir)));
                         }
                     }
                 }
