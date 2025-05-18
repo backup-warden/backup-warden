@@ -16,8 +16,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <Grid
-            x:Name="AppTitleBar"/>
+        <Grid x:Name="AppTitleBar" />
         <Grid Grid.Row="1" Padding="24">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -49,7 +48,7 @@
                                     Margin="0,0,0,12"
                                     HorizontalAlignment="Left"
                                     IsReadOnly="True"
-                                    Text="{Binding}" />
+                                    Text="{x:Bind}" />
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -79,12 +78,20 @@
                     </StackPanel>
                 </StackPanel>
             </StackPanel>
-            <Button
+            <StackPanel
                 Grid.Row="2"
                 Margin="0,12,8,0"
                 HorizontalAlignment="Left"
-                Command="{x:Bind ViewModel.SyncCommand}"
-                Content="Sync" />
+                Orientation="Horizontal"
+                Spacing="4">
+                <Button Command="{x:Bind ViewModel.SyncCommand}" Content="Sync" />
+                <ProgressBar
+                    Width="150"
+                    Maximum="100"
+                    Minimum="0"
+                    Visibility="Visible"
+                    Value="{x:Bind ViewModel.SyncProgress, Mode=OneWay}" />
+            </StackPanel>
         </Grid>
     </Grid>
 </Window>

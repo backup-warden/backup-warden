@@ -1,4 +1,5 @@
-﻿using BackupWarden.Utils;
+﻿using BackupWarden.Models;
+using BackupWarden.Utils;
 using Polly;
 using Polly.Retry;
 using System;
@@ -12,7 +13,7 @@ namespace BackupWarden.Services
 {
     public interface IBackupSyncService
     {
-        Task SyncAsync(IEnumerable<string> sourcePaths, string destinationRoot);
+        Task SyncAsync(IEnumerable<BackupConfig> configs, string destinationRoot, IProgress<int>? progress = null);
     }
 
     public class BackupSyncService : IBackupSyncService
@@ -21,10 +22,39 @@ namespace BackupWarden.Services
             .Handle<IOException>()
             .WaitAndRetryAsync(5, retryAttempt => TimeSpan.FromMilliseconds(500));
 
-        public async Task SyncAsync(IEnumerable<string> sourcePaths, string destinationRoot)
+        public async Task SyncAsync(IEnumerable<BackupConfig> configs, string destinationRoot, IProgress<int>? progress = null)
+        {
+            var appList = configs.SelectMany(cfg => cfg.Apps)
+                                 .Where(app => !string.IsNullOrWhiteSpace(app.Id))
+                                 .ToList();
+
+            // Calculate total number of paths to sync
+            int totalPaths = appList.Sum(app => app.Paths?.Count ?? 0);
+            if (totalPaths == 0)
+            {
+                progress?.Report(100);
+                return;
+            }
+
+            int processedPaths = 0;
+
+            foreach (var app in appList)
+            {
+                var appDest = Path.Combine(destinationRoot, app.Id);
+
+                // Report progress after each path
+                await SyncPathsAsync(app.Paths, appDest, () =>
+                {
+                    processedPaths++;
+                    int percent = (int)((processedPaths / (double)totalPaths) * 100);
+                    progress?.Report(percent);
+                });
+            }
+        }
+
+        private static async Task SyncPathsAsync(IEnumerable<string> sourcePaths, string destinationRoot, Action? onPathProcessed = null)
         {
             var sourceFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
             var expandedPaths = sourcePaths.Select(SpecialFolderUtil.ExpandSpecialFolders).ToList();
 
             try
@@ -43,6 +73,7 @@ namespace BackupWarden.Services
                     {
                         await SyncFileAsync(sourcePath, destinationRoot, sourceFiles);
                     }
+                    onPathProcessed?.Invoke();
                 }
 
                 // Delete files in destination that are not in source
@@ -72,7 +103,6 @@ namespace BackupWarden.Services
                 Debug.WriteLine(ex.ToString());
                 throw;
             }
-            
         }
 
         private static async Task SyncDirectoryAsync(string sourceDir, string destinationRoot, HashSet<string> sourceFiles)
@@ -96,11 +126,15 @@ namespace BackupWarden.Services
         {
             Directory.CreateDirectory(Path.GetDirectoryName(destFile)!);
 
-            if (!File.Exists(destFile) ||
-                new FileInfo(sourceFile).Length != new FileInfo(destFile).Length ||
-                File.GetLastWriteTimeUtc(sourceFile) != File.GetLastWriteTimeUtc(destFile))
+            var fileInfoSource = new FileInfo(sourceFile);
+            var fileInfoDestination = File.Exists(destFile) ? new FileInfo(destFile) : null;
+
+            if (fileInfoDestination is null ||
+                fileInfoSource.Length != fileInfoDestination.Length ||
+                fileInfoSource.LastWriteTimeUtc != fileInfoDestination.LastWriteTimeUtc)
             {
                 await CopyFileAsync(sourceFile, destFile);
+                File.SetLastWriteTimeUtc(destFile, fileInfoSource.LastWriteTimeUtc);
             }
             sourceFiles.Add(destFile);
         }

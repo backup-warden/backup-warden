@@ -26,6 +26,27 @@ namespace BackupWarden.ViewModels
             }
         }
 
+        private bool _isSyncing;
+        public bool IsSyncing
+        {
+            get => _isSyncing;
+            set
+            {
+                SetProperty(ref _isSyncing, value);
+                SyncCommand.NotifyCanExecuteChanged();
+            }
+        }
+
+        private int _syncProgress;
+        public int SyncProgress
+        {
+            get => _syncProgress;
+            set
+            {
+                SetProperty(ref _syncProgress, value);
+            }
+        }
+
         private readonly IYamlConfigService _yamlConfigService;
         private readonly IAppSettingsService _appSettingsService;
         private readonly IBackupSyncService _backupSyncService;
@@ -105,7 +126,7 @@ namespace BackupWarden.ViewModels
 
         private bool CanSync()
         {
-            return YamlFilePaths.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
+            return !IsSyncing && YamlFilePaths.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
         }
 
         private async Task BrowseDestinationFolderAsync()
@@ -129,23 +150,27 @@ namespace BackupWarden.ViewModels
 
         private async Task SyncAsync()
         {
-            // Load all configs
-            var configs = YamlFilePaths
-                .Where(File.Exists)
-                .Select(path => _yamlConfigService.LoadConfig(path))
-                .Where(cfg => cfg is not null);
-
-            foreach (var config in configs)
+            IsSyncing = true;
+            SyncProgress = 0;
+            try
             {
-                foreach (var app in config.Apps)
+                // Load all configs
+                var configs = YamlFilePaths
+                    .Where(File.Exists)
+                    .Select(path => _yamlConfigService.LoadConfig(path))
+                    .Where(cfg => cfg is not null)
+                    .ToList();
+
+                var progress = new Progress<int>(percent =>
                 {
-                    if (string.IsNullOrWhiteSpace(app.Id))
-                    {
-                        continue;
-                    }
-                    var appDest = Path.Combine(DestinationFolder!, app.Id);
-                    await _backupSyncService.SyncAsync(app.Paths, appDest);
-                }
+                    SyncProgress = percent;
+                });
+
+                await _backupSyncService.SyncAsync(configs, DestinationFolder!, progress);
+            }
+            finally
+            {
+                IsSyncing = false;
             }
         }
     }
