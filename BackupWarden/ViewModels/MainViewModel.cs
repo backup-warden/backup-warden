@@ -2,6 +2,7 @@
 using BackupWarden.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -50,6 +51,7 @@ namespace BackupWarden.ViewModels
         private readonly IYamlConfigService _yamlConfigService;
         private readonly IAppSettingsService _appSettingsService;
         private readonly IBackupSyncService _backupSyncService;
+        private readonly ILogger<MainViewModel> _logger;
 
         public IAsyncRelayCommand AddYamlFileCommand { get; }
         public IAsyncRelayCommand SyncCommand { get; }
@@ -58,11 +60,13 @@ namespace BackupWarden.ViewModels
         public MainViewModel(
             IAppSettingsService appSettingsService,
             IYamlConfigService yamlConfigService,
-            IBackupSyncService backupSyncService)
+            IBackupSyncService backupSyncService,
+            ILogger<MainViewModel> logger)
         {
             _yamlConfigService = yamlConfigService;
             _appSettingsService = appSettingsService;
             _backupSyncService = backupSyncService;
+            _logger = logger;
 
             AddYamlFileCommand = new AsyncRelayCommand(AddYamlFileAsync);
             BrowseDestinationFolderCommand = new AsyncRelayCommand(BrowseDestinationFolderAsync);
@@ -134,6 +138,7 @@ namespace BackupWarden.ViewModels
 
         private async Task SyncAsync()
         {
+            _logger.LogWarning("Sync started.");
             IsSyncing = true;
             SyncProgress = 0;
             try
@@ -141,7 +146,7 @@ namespace BackupWarden.ViewModels
                 // Load all configs
                 var configs = YamlFilePaths
                     .Where(File.Exists)
-                    .Select(path => _yamlConfigService.LoadConfig(path))
+                    .Select(_yamlConfigService.LoadConfig)
                     .Where(cfg => cfg is not null)
                     .ToList();
 
@@ -152,10 +157,29 @@ namespace BackupWarden.ViewModels
 
                 await _backupSyncService.SyncAsync(configs, DestinationFolder!, progress);
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred during sync.");
+
+                await ShowErrorAsync("An error occurred during synchronization. Please check the logs for details.");
+            }
             finally
             {
                 IsSyncing = false;
+                _logger.LogWarning("Sync finished.");
             }
+        }
+
+        private static async Task ShowErrorAsync(string message)
+        {
+            var dialog = new Microsoft.UI.Xaml.Controls.ContentDialog
+            {
+                Title = "Error",
+                Content = message,
+                CloseButtonText = "OK",
+                XamlRoot = App.MainWindow.Content.XamlRoot
+            };
+            await dialog.ShowAsync();
         }
     }
 }

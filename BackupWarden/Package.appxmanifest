@@ -8,7 +8,7 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="629b0b57-81fe-4806-99ac-a4e319a3d78b"
+    Name="BackupWarden"
     Publisher="CN=miguelkmarques"
     Version="1.0.0.0" />
 

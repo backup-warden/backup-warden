@@ -1,5 +1,6 @@
 ﻿using BackupWarden.Models;
 using BackupWarden.Utils;
+using Microsoft.Extensions.Logging;
 using Polly;
 using Polly.Retry;
 using System;
@@ -18,9 +19,16 @@ namespace BackupWarden.Services
 
     public class BackupSyncService : IBackupSyncService
     {
-        private static readonly AsyncRetryPolicy RetryPolicy = Policy
+        private static readonly AsyncRetryPolicy _retryPolicy = Policy
             .Handle<IOException>()
             .WaitAndRetryAsync(5, retryAttempt => TimeSpan.FromMilliseconds(500));
+
+        private readonly ILogger<BackupSyncService> _logger;
+
+        public BackupSyncService(ILogger<BackupSyncService> logger)
+        {
+            _logger = logger;
+        }
 
         public async Task SyncAsync(IEnumerable<BackupConfig> configs, string destinationRoot, IProgress<int>? progress = null)
         {
@@ -32,9 +40,11 @@ namespace BackupWarden.Services
             int totalPaths = appList.Sum(app => app.Paths?.Count ?? 0);
             if (totalPaths == 0)
             {
+                _logger.LogWarning("No paths to sync found in the provided configurations.");
                 progress?.Report(100);
                 return;
             }
+            _logger.LogWarning("Total paths to sync: {totalPaths}", totalPaths);
 
             int processedPaths = 0;
 
@@ -57,51 +67,43 @@ namespace BackupWarden.Services
             var sourceFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var expandedPaths = sourcePaths.Select(SpecialFolderUtil.ExpandSpecialFolders).ToList();
 
-            try
+            foreach (var sourcePath in expandedPaths)
             {
-                foreach (var sourcePath in expandedPaths)
+                if (sourcePath.EndsWith('\\') || sourcePath.EndsWith('/'))
                 {
-                    if (sourcePath.EndsWith('\\') || sourcePath.EndsWith('/'))
+                    var dirPath = sourcePath.TrimEnd('\\', '/');
+                    if (Directory.Exists(dirPath))
                     {
-                        var dirPath = sourcePath.TrimEnd('\\', '/');
-                        if (Directory.Exists(dirPath))
-                        {
-                            await SyncDirectoryAsync(dirPath, destinationRoot, sourceFiles);
-                        }
-                    }
-                    else if (File.Exists(sourcePath))
-                    {
-                        await SyncFileAsync(sourcePath, destinationRoot, sourceFiles);
-                    }
-                    onPathProcessed?.Invoke();
-                }
-
-                // Delete files in destination that are not in source
-                if (Directory.Exists(destinationRoot))
-                {
-                    foreach (var destFile in Directory.EnumerateFiles(destinationRoot, "*", SearchOption.AllDirectories))
-                    {
-                        if (!sourceFiles.Contains(destFile))
-                        {
-                            await RetryPolicy.ExecuteAsync(() => Task.Run(() => File.Delete(destFile)));
-                        }
-                    }
-
-                    // Delete empty directories (bottom-up by depth)
-                    foreach (var dir in Directory.EnumerateDirectories(destinationRoot, "*", SearchOption.AllDirectories)
-                        .OrderByDescending(d => d.Count(c => c == Path.DirectorySeparatorChar)))
-                    {
-                        if (!Directory.EnumerateFileSystemEntries(dir).Any())
-                        {
-                            await RetryPolicy.ExecuteAsync(() => Task.Run(() => Directory.Delete(dir)));
-                        }
+                        await SyncDirectoryAsync(dirPath, destinationRoot, sourceFiles);
                     }
                 }
+                else if (File.Exists(sourcePath))
+                {
+                    await SyncFileAsync(sourcePath, destinationRoot, sourceFiles);
+                }
+                onPathProcessed?.Invoke();
             }
-            catch (Exception ex)
+
+            // Delete files in destination that are not in source
+            if (Directory.Exists(destinationRoot))
             {
-                Debug.WriteLine(ex.ToString());
-                throw;
+                foreach (var destFile in Directory.EnumerateFiles(destinationRoot, "*", SearchOption.AllDirectories))
+                {
+                    if (!sourceFiles.Contains(destFile))
+                    {
+                        await _retryPolicy.ExecuteAsync(() => Task.Run(() => File.Delete(destFile)));
+                    }
+                }
+
+                // Delete empty directories (bottom-up by depth)
+                foreach (var dir in Directory.EnumerateDirectories(destinationRoot, "*", SearchOption.AllDirectories)
+                    .OrderByDescending(d => d.Count(c => c == Path.DirectorySeparatorChar)))
+                {
+                    if (!Directory.EnumerateFileSystemEntries(dir).Any())
+                    {
+                        await _retryPolicy.ExecuteAsync(() => Task.Run(() => Directory.Delete(dir)));
+                    }
+                }
             }
         }
 
@@ -154,7 +156,7 @@ namespace BackupWarden.Services
         private static async Task CopyFileAsync(string sourceFile, string destFile)
         {
             const int bufferSize = 81920; // 80 KB
-            await RetryPolicy.ExecuteAsync(async () =>
+            await _retryPolicy.ExecuteAsync(async () =>
             {
                 using var sourceStream = new FileStream(sourceFile, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true);
                 using var destStream = new FileStream(destFile, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, useAsync: true);
