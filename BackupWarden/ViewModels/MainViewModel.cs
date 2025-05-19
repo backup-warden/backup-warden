@@ -93,25 +93,33 @@ namespace BackupWarden.ViewModels
 
         private async Task AddYamlFileAsync()
         {
-            var picker = new Windows.Storage.Pickers.FileOpenPicker();
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-            picker.FileTypeFilter.Add(".yaml");
-            picker.FileTypeFilter.Add(".yml");
-            picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
-            picker.ViewMode = Windows.Storage.Pickers.PickerViewMode.List;
-
-            var files = await picker.PickMultipleFilesAsync();
-            if (files is not null)
+            try
             {
-                foreach (var file in files)
+                var picker = new Windows.Storage.Pickers.FileOpenPicker();
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                picker.FileTypeFilter.Add(".yaml");
+                picker.FileTypeFilter.Add(".yml");
+                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
+                picker.ViewMode = Windows.Storage.Pickers.PickerViewMode.List;
+
+                var files = await picker.PickMultipleFilesAsync();
+                if (files is not null)
                 {
-                    if (!YamlFilePaths.Contains(file.Path))
+                    foreach (var file in files)
                     {
-                        YamlFilePaths.Add(file.Path);
+                        if (!YamlFilePaths.Contains(file.Path))
+                        {
+                            YamlFilePaths.Add(file.Path);
+                        }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while adding YAML files.");
+                await ShowErrorAsync("An error occurred. Please check the logs for details.");
             }
         }
 
@@ -122,17 +130,25 @@ namespace BackupWarden.ViewModels
 
         private async Task BrowseDestinationFolderAsync()
         {
-            var picker = new Windows.Storage.Pickers.FolderPicker();
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-            picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
-            picker.FileTypeFilter.Add("*");
-
-            var folder = await picker.PickSingleFolderAsync();
-            if (folder is not null)
+            try
             {
-                DestinationFolder = folder.Path;
-                _appSettingsService.SaveDestinationFolder(folder.Path);
+                var picker = new Windows.Storage.Pickers.FolderPicker();
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
+                picker.FileTypeFilter.Add("*");
+
+                var folder = await picker.PickSingleFolderAsync();
+                if (folder is not null)
+                {
+                    DestinationFolder = folder.Path;
+                    _appSettingsService.SaveDestinationFolder(folder.Path);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while browsing for a destination folder.");
+                await ShowErrorAsync("An error occurred. Please check the logs for details.");
             }
         }
 

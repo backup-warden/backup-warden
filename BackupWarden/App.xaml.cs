@@ -5,6 +5,8 @@ using BackupWarden.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
+using Microsoft.Windows.AppNotifications;
+using Microsoft.Windows.AppNotifications.Builder;
 using Serilog;
 using System;
 
@@ -52,7 +54,17 @@ namespace BackupWarden
 
         private void App_UnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
         {
+            e.Handled = true;
             Log.Error(e.Exception, "Unhandled exception");
+            var notification = new AppNotificationBuilder()
+                .AddText("An exception was thrown.")
+                .AddText($"Type: {e.Exception.GetType()}")
+                .AddText($"Message: {e.Message}\r\n" +
+                         $"HResult: {e.Exception.HResult}")
+                .BuildNotification();
+
+            //Show the notification
+            AppNotificationManager.Default.Show(notification);
         }
 
         protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)

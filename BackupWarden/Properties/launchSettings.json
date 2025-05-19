@@ -1,7 +1,8 @@
 {
   "profiles": {
     "BackupWarden (Package)": {
-      "commandName": "MsixPackage"
+      "commandName": "MsixPackage",
+      "nativeDebugging": true
     },
     "BackupWarden (Unpackaged)": {
       "commandName": "Project"
