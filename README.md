@@ -1,7 +1,7 @@
 # BackupWarden
 
 # TODO
-- [ ] Verify the capability of file access.
+- [x] Verify the capability of file access.
 - [ ] Add function to exclude a YML file.
 - [x] Add errors treatment
 - [x] Add Hosting

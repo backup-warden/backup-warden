@@ -56,6 +56,7 @@ namespace BackupWarden.ViewModels
         public IAsyncRelayCommand AddYamlFileCommand { get; }
         public IAsyncRelayCommand SyncCommand { get; }
         public IAsyncRelayCommand BrowseDestinationFolderCommand { get; }
+        public IRelayCommand<string> RemoveYamlFileCommand { get; }
 
         public MainViewModel(
             IAppSettingsService appSettingsService,
@@ -71,6 +72,7 @@ namespace BackupWarden.ViewModels
             AddYamlFileCommand = new AsyncRelayCommand(AddYamlFileAsync);
             BrowseDestinationFolderCommand = new AsyncRelayCommand(BrowseDestinationFolderAsync);
             SyncCommand = new AsyncRelayCommand(SyncAsync, CanSync);
+            RemoveYamlFileCommand = new RelayCommand<string>(RemoveYamlFile);
 
             LoadAppSettings();
 
@@ -149,6 +151,14 @@ namespace BackupWarden.ViewModels
             {
                 _logger.LogError(ex, "An error occurred while browsing for a destination folder.");
                 await ShowErrorAsync("An error occurred. Please check the logs for details.");
+            }
+        }
+
+        private void RemoveYamlFile(string? filePath)
+        {
+            if (!string.IsNullOrEmpty(filePath) && YamlFilePaths.Contains(filePath))
+            {
+                YamlFilePaths.Remove(filePath);
             }
         }
 
