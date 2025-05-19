@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<linker>
+	<!--<assembly fullname="Serilog" preserve="all">
+	</assembly>-->
+	<!--<assembly fullname="YamlDotNet" preserve="all">
+	</assembly>-->
+	<assembly fullname="BackupWarden">
+		<type fullname="BackupWarden.Models.BackupConfig" preserve="all">
+		</type>
+		<type fullname="BackupWarden.Models.AppConfig" preserve="all">
+		</type>
+	</assembly>
+</linker>

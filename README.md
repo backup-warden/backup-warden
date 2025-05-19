@@ -3,9 +3,9 @@
 # TODO
 - [ ] Verify the capability of file access.
 - [ ] Add function to exclude a YML file.
-- [ ] Add errors treatment
-- [ ] Add Hosting
-- [ ] Add Logging with Serilog
+- [x] Add errors treatment
+- [x] Add Hosting
+- [x] Add Logging with Serilog
 - [ ] Verify to publish the APP as unpacked.
 - [x] Validate if the empty folders are being deleted on destination.
 - [ ] Implement a way to recover the files of a selected app.
