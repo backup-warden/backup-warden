@@ -20,13 +20,15 @@ namespace BackupWarden
             InitializeComponent();
             ExtendsContentIntoTitleBar = true;
 
-            IntPtr hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-
-            var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
-
-            AppWindow appWindow = AppWindow.GetFromWindowId(windowId);
-
-            appWindow.Resize(new SizeInt32(1280, 720)); 
+            AppWindow.Resize(new SizeInt32(1920, 1080));
+            CenterWindow();
         }
+        private void CenterWindow()
+        {
+            var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest)?.WorkArea;
+            if (area == null) return;
+            AppWindow.Move(new PointInt32((area.Value.Width - AppWindow.Size.Width) / 2, (area.Value.Height - AppWindow.Size.Height) / 2));
+        }
+
     }
 }

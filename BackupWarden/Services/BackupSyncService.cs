@@ -14,7 +14,7 @@ namespace BackupWarden.Services
 {
     public interface IBackupSyncService
     {
-        Task SyncAsync(IEnumerable<BackupConfig> configs, string destinationRoot, IProgress<int>? progress = null);
+        Task SyncAsync(IEnumerable<AppConfig> configs, string destinationRoot, IProgress<int>? progress = null);
     }
 
     public class BackupSyncService : IBackupSyncService
@@ -30,10 +30,9 @@ namespace BackupWarden.Services
             _logger = logger;
         }
 
-        public async Task SyncAsync(IEnumerable<BackupConfig> configs, string destinationRoot, IProgress<int>? progress = null)
+        public async Task SyncAsync(IEnumerable<AppConfig> configs, string destinationRoot, IProgress<int>? progress = null)
         {
-            var appList = configs.SelectMany(cfg => cfg.Apps)
-                                 .Where(app => !string.IsNullOrWhiteSpace(app.Id))
+            var appList = configs.Where(app => !string.IsNullOrWhiteSpace(app.Id))
                                  .ToList();
 
             // Calculate total number of paths to sync

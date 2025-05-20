@@ -13,6 +13,8 @@ namespace BackupWarden.ViewModels
 {
     public partial class MainViewModel : ObservableObject
     {
+        public ObservableCollection<AppConfig> LoadedApps { get; } = [];
+
         public ObservableCollection<string> YamlFilePaths { get; } = [];
 
         private string? _destinationFolder;
@@ -48,6 +50,14 @@ namespace BackupWarden.ViewModels
             }
         }
 
+        private AppConfig? _selectedApp;
+        public AppConfig? SelectedApp
+        {
+            get => _selectedApp;
+            set => SetProperty(ref _selectedApp, value);
+        }
+
+
         private readonly IYamlConfigService _yamlConfigService;
         private readonly IAppSettingsService _appSettingsService;
         private readonly IBackupSyncService _backupSyncService;
@@ -75,6 +85,7 @@ namespace BackupWarden.ViewModels
             RemoveYamlFileCommand = new RelayCommand<string>(RemoveYamlFile);
 
             LoadAppSettings();
+            LoadAppsFromConfigs();
 
         }
 
@@ -90,8 +101,25 @@ namespace BackupWarden.ViewModels
             {
                 _appSettingsService.SaveYamlFilePaths(YamlFilePaths);
                 SyncCommand.NotifyCanExecuteChanged();
+                LoadAppsFromConfigs();
             };
         }
+
+        private void LoadAppsFromConfigs()
+        {
+            LoadedApps.Clear();
+            foreach (var config in YamlFilePaths
+                .Where(File.Exists)
+                .Select(_yamlConfigService.LoadConfig)
+                .Where(cfg => cfg is not null))
+            {
+                foreach (var app in config.Apps)
+                {
+                    LoadedApps.Add(app);
+                }
+            }
+        }
+
 
         private async Task AddYamlFileAsync()
         {
@@ -169,19 +197,12 @@ namespace BackupWarden.ViewModels
             SyncProgress = 0;
             try
             {
-                // Load all configs
-                var configs = YamlFilePaths
-                    .Where(File.Exists)
-                    .Select(_yamlConfigService.LoadConfig)
-                    .Where(cfg => cfg is not null)
-                    .ToList();
-
                 var progress = new Progress<int>(percent =>
                 {
                     SyncProgress = percent;
                 });
 
-                await _backupSyncService.SyncAsync(configs, DestinationFolder!, progress);
+                await _backupSyncService.SyncAsync(LoadedApps, DestinationFolder!, progress);
             }
             catch (Exception ex)
             {
