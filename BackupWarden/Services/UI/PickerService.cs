@@ -163,40 +163,51 @@ namespace BackupWarden.Services.UI
                 out var fod);
             hr.ThrowOnFailure();
 
-            fod.GetOptions(out var options);
-            fod.SetOptions(options | FILEOPENDIALOGOPTIONS.FOS_PICKFOLDERS | FILEOPENDIALOGOPTIONS.FOS_FORCEFILESYSTEM);
-
-            hr = PInvoke.SHCreateItemFromParsingName(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                null,
-                typeof(IShellItem).GUID,
-                out var directoryShellItem);
-            if (hr.Succeeded)
-            {
-                fod.SetFolder((IShellItem)directoryShellItem);
-                fod.SetDefaultFolder((IShellItem)directoryShellItem);
-            }
-
+            void* directoryShellItem = null;
+            IShellItem* ppsi = null;
             try
             {
-                fod.Show(new HWND(hWnd));
-            }
-            catch (COMException ex) when ((uint)ex.HResult == 0x800704C7) // ERROR_CANCELLED
-            {
+                fod->GetOptions(out var options);
+                fod->SetOptions(options | FILEOPENDIALOGOPTIONS.FOS_PICKFOLDERS | FILEOPENDIALOGOPTIONS.FOS_FORCEFILESYSTEM);
+
+                hr = PInvoke.SHCreateItemFromParsingName(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    null,
+                    typeof(IShellItem).GUID,
+                    out directoryShellItem);
+                if (hr.Succeeded)
+                {
+                    fod->SetFolder((IShellItem*)directoryShellItem);
+                    fod->SetDefaultFolder((IShellItem*)directoryShellItem);
+                }
+
+                try
+                {
+                    fod->Show(new HWND(hWnd));
+                }
+                catch (COMException ex) when ((uint)ex.HResult == 0x800704C7)
+                {
+                    return null;
+                }
+
+                fod->GetResult(&ppsi);
+
+                if (ppsi is not null)
+                {
+                    ppsi->GetDisplayName(SIGDN.SIGDN_FILESYSPATH, out var pszPath);
+                    string? folderPath = pszPath.ToString();
+                    Marshal.FreeCoTaskMem((IntPtr)pszPath.Value);
+                    return folderPath;
+                }
+
                 return null;
             }
-
-            fod.GetResult(out var ppsi);
-
-            if (ppsi is not null)
+            finally
             {
-                ppsi.GetDisplayName(SIGDN.SIGDN_FILESYSPATH, out var pszPath);
-                string? folderPath = pszPath.ToString();
-                Marshal.FreeCoTaskMem((IntPtr)pszPath.Value);
-                return folderPath;
+                if (ppsi is not null) ppsi->Release();
+                if (directoryShellItem is not null) ((IShellItem*)directoryShellItem)->Release();
+                if (fod is not null) fod->Release();
             }
-
-            return null;
         }
     }
 }

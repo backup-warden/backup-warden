@@ -9,7 +9,7 @@
 
   <Identity
     Name="BackupWarden"
-    Publisher="CN=miguelkmarques"
+    Publisher="CN=miguel.marques"
     Version="1.0.0.0" />
 
   <mp:PhoneIdentity PhoneProductId="629b0b57-81fe-4806-99ac-a4e319a3d78b" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>

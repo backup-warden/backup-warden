@@ -4,6 +4,8 @@
 	</assembly>-->
 	<!--<assembly fullname="YamlDotNet" preserve="all">
 	</assembly>-->
+	<assembly fullname="Windows.Win32" preserve="all">
+	</assembly>
 	<assembly fullname="BackupWarden">
 		<type fullname="BackupWarden.Models.BackupConfig" preserve="all">
 		</type>
