@@ -157,17 +157,11 @@ namespace BackupWarden.ViewModels
         {
             try
             {
-                var picker = new Windows.Storage.Pickers.FolderPicker();
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
-                picker.FileTypeFilter.Add("*");
-
-                var folder = await picker.PickSingleFolderAsync();
+                var folder = await _pickerService.PickFolderAsync();
                 if (folder is not null)
                 {
-                    DestinationFolder = folder.Path;
-                    _appSettingsService.SaveDestinationFolder(folder.Path);
+                    DestinationFolder = folder;
+                    _appSettingsService.SaveDestinationFolder(folder);
                 }
             }
             catch (Exception ex)
