@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
-namespace BackupWarden.Services
+namespace BackupWarden.Services.Business
 {
     public interface IYamlConfigService
     {

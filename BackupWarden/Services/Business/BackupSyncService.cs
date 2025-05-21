@@ -10,7 +10,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace BackupWarden.Services
+namespace BackupWarden.Services.Business
 {
     public interface IBackupSyncService
     {
@@ -43,7 +43,7 @@ namespace BackupWarden.Services
                 progress?.Report(100);
                 return;
             }
-            _logger.LogWarning("Total paths to sync: {totalPaths}", totalPaths);
+            _logger.LogWarning("Total paths to sync: {TotalPaths}", totalPaths);
 
             int processedPaths = 0;
 
@@ -55,7 +55,7 @@ namespace BackupWarden.Services
                 await SyncPathsAsync(app.Paths, appDest, () =>
                 {
                     processedPaths++;
-                    int percent = (int)((processedPaths / (double)totalPaths) * 100);
+                    int percent = (int)(processedPaths / (double)totalPaths * 100);
                     progress?.Report(percent);
                 });
             }

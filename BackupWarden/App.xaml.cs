@@ -1,5 +1,6 @@
 ﻿using BackupWarden.Logging;
-using BackupWarden.Services;
+using BackupWarden.Services.Business;
+using BackupWarden.Services.UI;
 using BackupWarden.ViewModels;
 using BackupWarden.Views;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,10 +36,13 @@ namespace BackupWarden
                 .UseSerilog()
                 .ConfigureServices((context, services) =>
                 {
-                    // Register services
+                    // Register Business services
                     services.AddSingleton<IAppSettingsService, AppSettingsService>();
                     services.AddSingleton<IYamlConfigService, YamlConfigService>();
                     services.AddSingleton<IBackupSyncService, BackupSyncService>();
+
+                    services.AddSingleton<IDialogService, DialogService>();
+                    services.AddSingleton<IPickerService, PickerService>();
 
                     // Register MainWindow and ViewModel
                     services.AddTransient<MainViewModel>();
@@ -52,7 +56,7 @@ namespace BackupWarden
             Log.Information("Application started");
         }
 
-        private void App_UnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+        private static void App_UnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
         {
             e.Handled = true;
             Log.Error(e.Exception, "Unhandled exception");
@@ -67,7 +71,7 @@ namespace BackupWarden
             AppNotificationManager.Default.Show(notification);
         }
 
-        protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
+        protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
             var mainPage = _host.Services.GetRequiredService<MainPage>();
             MainWindow.Content = mainPage;

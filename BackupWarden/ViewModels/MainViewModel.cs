@@ -1,5 +1,6 @@
 ﻿using BackupWarden.Models;
-using BackupWarden.Services;
+using BackupWarden.Services.Business;
+using BackupWarden.Services.UI;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -50,17 +51,16 @@ namespace BackupWarden.ViewModels
             }
         }
 
-        private AppConfig? _selectedApp;
-        public AppConfig? SelectedApp
-        {
-            get => _selectedApp;
-            set => SetProperty(ref _selectedApp, value);
-        }
+        public ObservableCollection<AppConfig> SelectedApps { get; set; } = [];
 
 
         private readonly IYamlConfigService _yamlConfigService;
         private readonly IAppSettingsService _appSettingsService;
         private readonly IBackupSyncService _backupSyncService;
+
+        private readonly IPickerService _pickerService;
+        private readonly IDialogService _dialogService;
+
         private readonly ILogger<MainViewModel> _logger;
 
         public IAsyncRelayCommand AddYamlFileCommand { get; }
@@ -72,11 +72,15 @@ namespace BackupWarden.ViewModels
             IAppSettingsService appSettingsService,
             IYamlConfigService yamlConfigService,
             IBackupSyncService backupSyncService,
+            IPickerService pickerService,
+            IDialogService dialogService,
             ILogger<MainViewModel> logger)
         {
             _yamlConfigService = yamlConfigService;
             _appSettingsService = appSettingsService;
             _backupSyncService = backupSyncService;
+            _pickerService = pickerService;
+            _dialogService = dialogService;
             _logger = logger;
 
             AddYamlFileCommand = new AsyncRelayCommand(AddYamlFileAsync);
@@ -125,23 +129,14 @@ namespace BackupWarden.ViewModels
         {
             try
             {
-                var picker = new Windows.Storage.Pickers.FileOpenPicker();
-                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                picker.FileTypeFilter.Add(".yaml");
-                picker.FileTypeFilter.Add(".yml");
-                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
-                picker.ViewMode = Windows.Storage.Pickers.PickerViewMode.List;
-
-                var files = await picker.PickMultipleFilesAsync();
-                if (files is not null)
+                var yamlFiles = await _pickerService.PickFilesAsync([".yaml", ".yml"], allowMultiple: true);
+                if (yamlFiles is not null)
                 {
-                    foreach (var file in files)
+                    foreach (var file in yamlFiles)
                     {
-                        if (!YamlFilePaths.Contains(file.Path))
+                        if (!YamlFilePaths.Contains(file))
                         {
-                            YamlFilePaths.Add(file.Path);
+                            YamlFilePaths.Add(file);
                         }
                     }
                 }
@@ -149,7 +144,7 @@ namespace BackupWarden.ViewModels
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred while adding YAML files.");
-                await ShowErrorAsync("An error occurred. Please check the logs for details.");
+                await _dialogService.ShowErrorAsync("An error occurred. Please check the logs for details.");
             }
         }
 
@@ -178,7 +173,7 @@ namespace BackupWarden.ViewModels
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred while browsing for a destination folder.");
-                await ShowErrorAsync("An error occurred. Please check the logs for details.");
+                await _dialogService.ShowErrorAsync("An error occurred. Please check the logs for details.");
             }
         }
 
@@ -208,25 +203,13 @@ namespace BackupWarden.ViewModels
             {
                 _logger.LogError(ex, "An error occurred during sync.");
 
-                await ShowErrorAsync("An error occurred during synchronization. Please check the logs for details.");
+                await _dialogService.ShowErrorAsync("An error occurred during synchronization. Please check the logs for details.");
             }
             finally
             {
                 IsSyncing = false;
                 _logger.LogWarning("Sync finished.");
             }
-        }
-
-        private static async Task ShowErrorAsync(string message)
-        {
-            var dialog = new Microsoft.UI.Xaml.Controls.ContentDialog
-            {
-                Title = "Error",
-                Content = message,
-                CloseButtonText = "OK",
-                XamlRoot = App.MainWindow.Content.XamlRoot
-            };
-            await dialog.ShowAsync();
         }
     }
 }

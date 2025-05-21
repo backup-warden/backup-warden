@@ -2,7 +2,7 @@
 using System.Diagnostics;
 using Windows.Storage;
 
-namespace BackupWarden.Services
+namespace BackupWarden.Services.Business
 {
 
     public interface IAppSettingsService

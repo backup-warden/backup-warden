@@ -80,12 +80,6 @@
   </PropertyGroup>
 
 	<ItemGroup>
-		<!-- Force the linker to analyze every member in these assemblies -->
-		<!--<TrimmerRootAssembly Include="Serilog" />-->
-		<!--<TrimmerRootAssembly Include="YamlDotNet" />-->
-	</ItemGroup>
-
-	<ItemGroup>
 		<EmbeddedResource Include="ILLink.Descriptors.xml">
 			<LogicalName>ILLink.Descriptors.xml</LogicalName>
 		</EmbeddedResource>

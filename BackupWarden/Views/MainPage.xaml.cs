@@ -1,3 +1,4 @@
+using BackupWarden.Models;
 using BackupWarden.ViewModels;
 using Microsoft.UI.Xaml.Controls;
 
@@ -18,5 +19,14 @@ namespace BackupWarden.Views
         }
 
         public MainViewModel ViewModel { get; }
+
+        private void ListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            ViewModel.SelectedApps.Clear();
+            foreach (var item in ((ListView)sender).SelectedItems)
+            {
+                ViewModel.SelectedApps.Add((AppConfig)item);
+            }
+        }
     }
 }
