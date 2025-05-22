@@ -11,6 +11,7 @@ using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.System.Com;
 using Windows.Win32.UI.Shell;
+using Windows.Win32.UI.Shell.Common;
 
 namespace BackupWarden.Services.UI
 {
@@ -24,16 +25,28 @@ namespace BackupWarden.Services.UI
     {
         public async Task<IReadOnlyList<string>> PickFilesAsync(IEnumerable<string> fileTypeFilters, bool allowMultiple = false)
         {
+            if (!Environment.IsPrivilegedProcess)
+            {
+                return await PickFilesWinSdkAsync(fileTypeFilters, allowMultiple);
+            }
+            else
+            {
+                return PickFilesWin32(fileTypeFilters, allowMultiple);
+            }
+        }
+
+        private static async Task<List<string>> PickFilesWinSdkAsync(IEnumerable<string> fileTypeFilters, bool allowMultiple)
+        {
             var picker = new FileOpenPicker();
             var hwnd = WindowNative.GetWindowHandle(App.MainWindow);
             InitializeWithWindow.Initialize(picker, hwnd);
-
             foreach (var filter in fileTypeFilters)
+            {
                 picker.FileTypeFilter.Add(filter);
+            }
 
             picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
             picker.ViewMode = PickerViewMode.List;
-
             if (allowMultiple)
             {
                 var files = await picker.PickMultipleFilesAsync();
@@ -52,72 +65,149 @@ namespace BackupWarden.Services.UI
             }
         }
 
-        //private unsafe void myButton_Click(object sender, RoutedEventArgs e)
-        //{
-        //    // Retrieve the window handle (HWND) of the main WinUI 3 window.
-        //    var hWnd = WindowNative.GetWindowHandle(App.MainWindow);
+        private static unsafe List<string> PickFilesWin32(IEnumerable<string> fileTypeFilters, bool allowMultiple)
+        {
+            var hWnd = WindowNative.GetWindowHandle(App.MainWindow);
 
-        //    int hr = PInvoke.CoCreateInstance<IFileSaveDialog>(
-        //        typeof(FileSaveDialog).GUID,
-        //        null,
-        //        CLSCTX.CLSCTX_INPROC_SERVER,
-        //        out var fsd);
-        //    if (hr < 0)
-        //    {
-        //        Marshal.ThrowExceptionForHR(hr);
-        //    }
+            HRESULT hr = PInvoke.CoCreateInstance<IFileOpenDialog>(
+                typeof(FileOpenDialog).GUID,
+                null,
+                CLSCTX.CLSCTX_INPROC_SERVER,
+                out var fod);
+            hr.ThrowOnFailure();
 
-        //    // Set file type filters.
-        //    string filter = "Word Documents|*.docx|JPEG Files|*.jpg";
+            IShellItem* directoryShellItem = null;
+            IShellItemArray* resultsArray = null;
+            var allocatedPtrs = new List<IntPtr>();
+            try
+            {
+                fod->GetOptions(out var options);
+                options |= FILEOPENDIALOGOPTIONS.FOS_FORCEFILESYSTEM;
+                if (allowMultiple)
+                {
+                    options |= FILEOPENDIALOGOPTIONS.FOS_ALLOWMULTISELECT;
+                }
+                fod->SetOptions(options);
 
-        //    List<COMDLG_FILTERSPEC> extensions = [];
+                var filters = fileTypeFilters?.ToArray() ?? [];
+                var specs = new List<COMDLG_FILTERSPEC>();
 
-        //    if (!string.IsNullOrEmpty(filter))
-        //    {
-        //        string[] tokens = filter.Split('|');
-        //        if (0 == tokens.Length % 2)
-        //        {
-        //            // All even numbered tokens should be labels.
-        //            // Odd numbered tokens are the associated extensions.
-        //            for (int i = 1; i < tokens.Length; i += 2)
-        //            {
-        //                COMDLG_FILTERSPEC extension;
+                // Individual filters
+                foreach (var filter in filters)
+                {
+                    var pattern = filter.StartsWith('.') ? $"*{filter}" : filter;
+                    var name = pattern;
+                    var namePtr = Marshal.StringToHGlobalUni(name);
+                    var patternPtr = Marshal.StringToHGlobalUni(pattern);
+                    allocatedPtrs.Add(namePtr);
+                    allocatedPtrs.Add(patternPtr);
+                    specs.Add(new COMDLG_FILTERSPEC
+                    {
+                        pszName = (char*)namePtr,
+                        pszSpec = (char*)patternPtr
+                    });
+                }
 
-        //                extension.pszSpec = (char*)Marshal.StringToHGlobalUni(tokens[i]);
-        //                extension.pszName = (char*)Marshal.StringToHGlobalUni(tokens[i - 1]);
-        //                extensions.Add(extension);
-        //            }
-        //        }
-        //    }
-        //    fsd.SetFileTypes(extensions.ToArray());
+                // "All files" filter
+                if (filters.Length > 1)
+                {
+                    var patterns = filters.Select(f => f.StartsWith('.') ? $"*{f}" : f).ToArray();
+                    string displayName = "All files";
+                    string patternString = string.Join(";", patterns);
+                    var allNamePtr = Marshal.StringToHGlobalUni($"{displayName} ({string.Join(", ", patterns)})");
+                    var allSpecPtr = Marshal.StringToHGlobalUni(patternString);
+                    allocatedPtrs.Add(allNamePtr);
+                    allocatedPtrs.Add(allSpecPtr);
+                    specs.Add(new COMDLG_FILTERSPEC
+                    {
+                        pszName = (char*)allNamePtr,
+                        pszSpec = (char*)allSpecPtr
+                    });
+                }
 
-        //    // Set the default folder.
-        //    hr = PInvoke.SHCreateItemFromParsingName(
-        //        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-        //        null,
-        //        typeof(IShellItem).GUID,
-        //        out var directoryShellItem);
-        //    if (hr < 0)
-        //    {
-        //        Marshal.ThrowExceptionForHR(hr);
-        //    }
+                // Set filters
+                if (specs.Count > 0)
+                {
+                    fixed (COMDLG_FILTERSPEC* pSpecs = specs.ToArray())
+                    {
+                        fod->SetFileTypes((uint)specs.Count, pSpecs);
+                        // Select the last filter ("All files") by default
+                        fod->SetFileTypeIndex((uint)specs.Count);
+                    }
+                }
 
-        //    fsd.SetFolder((IShellItem)directoryShellItem);
-        //    fsd.SetDefaultFolder((IShellItem)directoryShellItem);
+                // Set default folder
+                hr = PInvoke.SHCreateItemFromParsingName(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    null,
+                    typeof(IShellItem).GUID,
+                    out var dirShellItem);
+                if (hr.Succeeded)
+                {
+                    directoryShellItem = (IShellItem*)dirShellItem;
+                    fod->SetFolder(directoryShellItem);
+                    fod->SetDefaultFolder(directoryShellItem);
+                }
 
-        //    // Set the default file name.
-        //    fsd.SetFileName($"{DateTime.Now:yyyyMMddHHmm}");
+                try
+                {
+                    fod->Show(new HWND(hWnd));
+                }
+                catch (COMException ex) when ((uint)ex.HResult == 0x800704C7)
+                {
+                    return [];
+                }
 
-        //    // Set the default extension.
-        //    fsd.SetDefaultExtension(".docx");
+                if (allowMultiple)
+                {
+                    fod->GetResults(&resultsArray);
+                    if (resultsArray is null)
+                    {
+                        return [];
+                    }
 
-        //    fsd.Show(new HWND(hWnd));
+                    resultsArray->GetCount(out uint count);
+                    var result = new List<string>((int)count);
+                    for (uint i = 0; i < count; i++)
+                    {
+                        IShellItem* item = null;
+                        resultsArray->GetItemAt(i, &item);
+                        if (item is not null)
+                        {
+                            item->GetDisplayName(SIGDN.SIGDN_FILESYSPATH, out var pszPath);
+                            result.Add(pszPath.ToString());
+                            Marshal.FreeCoTaskMem((IntPtr)pszPath.Value);
+                            item->Release();
+                        }
+                    }
+                    return result;
+                }
+                else
+                {
+                    IShellItem* ppsi = null;
+                    fod->GetResult(&ppsi);
+                    if (ppsi is not null)
+                    {
+                        ppsi->GetDisplayName(SIGDN.SIGDN_FILESYSPATH, out var pszPath);
+                        string? filePath = pszPath.ToString();
+                        Marshal.FreeCoTaskMem((IntPtr)pszPath.Value);
+                        ppsi->Release();
+                        return filePath is not null ? [filePath] : [];
+                    }
+                    return [];
+                }
+            }
+            finally
+            {
+                // Free all allocated filter strings
+                foreach (var ptr in allocatedPtrs)
+                    Marshal.FreeHGlobal(ptr);
 
-        //    fsd.GetResult(out var ppsi);
-
-        //    PWSTR filename;
-        //    ppsi.GetDisplayName(SIGDN.SIGDN_FILESYSPATH, &filename);
-        //}
+                if (resultsArray is not null) resultsArray->Release();
+                if (directoryShellItem is not null) directoryShellItem->Release();
+                if (fod is not null) fod->Release();
+            }
+        }
 
         public async Task<string?> PickFolderAsync()
         {

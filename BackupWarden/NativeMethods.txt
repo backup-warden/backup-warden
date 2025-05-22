@@ -1,7 +1,4 @@
 ﻿CoCreateInstance
 SHCreateItemFromParsingName
-IFileSaveDialog
-FileSaveDialog
 IFileOpenDialog
 FileOpenDialog
-IModalWindow
