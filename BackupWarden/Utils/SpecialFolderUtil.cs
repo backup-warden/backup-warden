@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BackupWarden.Utils
 {
@@ -25,14 +23,13 @@ namespace BackupWarden.Utils
         public static string ExpandSpecialFolders(string path)
         {
             if (string.IsNullOrEmpty(path))
-                return path;
-
-            foreach (var kvp in FolderResolvers)
             {
-                if (path.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
-                {
-                    path = path.Replace(kvp.Key, kvp.Value(), StringComparison.OrdinalIgnoreCase);
-                }
+                return path;
+            }
+
+            foreach (var kvp in FolderResolvers.Where(w => path.Contains(w.Key, StringComparison.OrdinalIgnoreCase)))
+            {
+                path = path.Replace(kvp.Key, kvp.Value(), StringComparison.OrdinalIgnoreCase);
             }
             return path;
         }

@@ -127,7 +127,7 @@ namespace BackupWarden.ViewModels
                 .Select(_yamlConfigService.LoadConfig)
                 .Where(cfg => cfg is not null))
             {
-                foreach (var app in config.Apps)
+                foreach (var app in config.Apps.Where(w => w.Paths.Count > 0))
                 {
                     LoadedApps.Add(app);
                 }

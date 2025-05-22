@@ -34,8 +34,10 @@ namespace BackupWarden.Services.Business
 
         public bool IsAppInSync(AppConfig app, string destinationRoot)
         {
-            if (app.Paths == null || string.IsNullOrWhiteSpace(app.Id))
+            if (string.IsNullOrWhiteSpace(app.Id))
+            {
                 return false;
+            }
 
             var appDest = Path.Combine(destinationRoot, app.Id);
 
@@ -89,7 +91,7 @@ namespace BackupWarden.Services.Business
         Action<AppConfig, SyncStatus>? perAppStatusCallback = null)
         {
             var appList = configs.Where(app => !string.IsNullOrWhiteSpace(app.Id)).ToList();
-            int totalPaths = appList.Sum(app => app.Paths?.Count ?? 0);
+            int totalPaths = appList.Sum(app => app.Paths.Count);
             if (totalPaths == 0)
             {
                 _logger.LogWarning("No paths to sync found in the provided configurations.");
