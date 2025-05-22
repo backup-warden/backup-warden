@@ -15,6 +15,7 @@
     <Page.Resources>
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         <converters:SyncStatusToIconConverter x:Key="SyncStatusToIconConverter" />
+        <converters:SyncStatusToColorConverter x:Key="SyncStatusToColorConverter" />
     </Page.Resources>
     <Grid Padding="24">
         <Grid.RowDefinitions>
@@ -139,6 +140,7 @@
                                         <FontIcon
                                             Margin="0,0,4,0"
                                             FontSize="18"
+                                            Foreground="{x:Bind SyncStatus, Converter={StaticResource SyncStatusToColorConverter}, Mode=OneWay}"
                                             Glyph="{x:Bind SyncStatus, Converter={StaticResource SyncStatusToIconConverter}, Mode=OneWay}" />
                                         <TextBlock FontWeight="Bold" Text="{x:Bind Name}" />
                                         <TextBlock Opacity="0.7" Text="{x:Bind Id}" />
