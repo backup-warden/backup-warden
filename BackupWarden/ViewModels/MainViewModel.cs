@@ -1,6 +1,7 @@
 ﻿using BackupWarden.Models;
 using BackupWarden.Services.Business;
 using BackupWarden.Services.UI;
+using BackupWarden.Utils;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -8,6 +9,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BackupWarden.ViewModels
@@ -63,6 +65,10 @@ namespace BackupWarden.ViewModels
 
         private readonly ILogger<MainViewModel> _logger;
 
+        private readonly Progress<int> _syncProgressReporter;
+        private readonly ContextCallback<AppConfig, SyncStatus> _syncStatusDispatcher;
+
+
         public IAsyncRelayCommand AddYamlFileCommand { get; }
         public IAsyncRelayCommand SyncCommand { get; }
         public IAsyncRelayCommand BrowseDestinationFolderCommand { get; }
@@ -79,9 +85,13 @@ namespace BackupWarden.ViewModels
             _yamlConfigService = yamlConfigService;
             _appSettingsService = appSettingsService;
             _backupSyncService = backupSyncService;
+
             _pickerService = pickerService;
             _dialogService = dialogService;
             _logger = logger;
+
+            _syncProgressReporter = new Progress<int>(percent => SyncProgress = percent);
+            _syncStatusDispatcher = new ContextCallback<AppConfig, SyncStatus>((app, status) => app.SyncStatus = status);
 
             AddYamlFileCommand = new AsyncRelayCommand(AddYamlFileAsync);
             BrowseDestinationFolderCommand = new AsyncRelayCommand(BrowseDestinationFolderAsync);
@@ -122,8 +132,27 @@ namespace BackupWarden.ViewModels
                     LoadedApps.Add(app);
                 }
             }
+
+            _ = CheckAppsSyncStatusAsync();
         }
 
+        private async Task CheckAppsSyncStatusAsync()
+        {
+            if (string.IsNullOrWhiteSpace(DestinationFolder))
+            {
+                return;
+            }
+            foreach (var app in LoadedApps)
+            {
+                await Task.Run(() =>
+                {
+                    var status = _backupSyncService.IsAppInSync(app, DestinationFolder)
+                       ? SyncStatus.InSync
+                       : SyncStatus.OutOfSync;
+                    _syncStatusDispatcher.Invoke(app, status);
+                });
+            }
+        }
 
         private async Task AddYamlFileAsync()
         {
@@ -186,17 +215,14 @@ namespace BackupWarden.ViewModels
             SyncProgress = 0;
             try
             {
-                var progress = new Progress<int>(percent =>
-                {
-                    SyncProgress = percent;
-                });
-
-                await _backupSyncService.SyncAsync(LoadedApps, DestinationFolder!, progress);
+                await _backupSyncService.SyncAsync(
+                    LoadedApps,
+                    DestinationFolder!,
+                    _syncProgressReporter, _syncStatusDispatcher.Invoke);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred during sync.");
-
                 await _dialogService.ShowErrorAsync("An error occurred during synchronization. Please check the logs for details.");
             }
             finally

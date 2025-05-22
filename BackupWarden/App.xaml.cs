@@ -50,7 +50,6 @@ namespace BackupWarden
                 })
                 .Build();
 
-
             UnhandledException += App_UnhandledException;
 
             Log.Information("Application started");

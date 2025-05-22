@@ -14,7 +14,9 @@ namespace BackupWarden.Services.Business
 {
     public interface IBackupSyncService
     {
-        Task SyncAsync(IEnumerable<AppConfig> configs, string destinationRoot, IProgress<int>? progress = null);
+        bool IsAppInSync(AppConfig app, string destinationRoot);
+
+        Task SyncAsync(IEnumerable<AppConfig> configs, string destinationRoot, IProgress<int>? progress = null, Action<AppConfig, SyncStatus>? perAppStatusCallback = null);
     }
 
     public class BackupSyncService : IBackupSyncService
@@ -30,12 +32,63 @@ namespace BackupWarden.Services.Business
             _logger = logger;
         }
 
-        public async Task SyncAsync(IEnumerable<AppConfig> configs, string destinationRoot, IProgress<int>? progress = null)
+        public bool IsAppInSync(AppConfig app, string destinationRoot)
         {
-            var appList = configs.Where(app => !string.IsNullOrWhiteSpace(app.Id))
-                                 .ToList();
+            if (app.Paths == null || string.IsNullOrWhiteSpace(app.Id))
+                return false;
 
-            // Calculate total number of paths to sync
+            var appDest = Path.Combine(destinationRoot, app.Id);
+
+            foreach (var sourcePath in app.Paths)
+            {
+                var expandedSource = SpecialFolderUtil.ExpandSpecialFolders(sourcePath);
+                if (Directory.Exists(expandedSource))
+                {
+                    foreach (var file in Directory.EnumerateFiles(expandedSource, "*", SearchOption.AllDirectories))
+                    {
+                        var relative = GetDriveLetterRelativePath(file);
+                        var destFile = Path.Combine(appDest, relative);
+                        if (!File.Exists(destFile))
+                        {
+                            return false;
+                        }
+
+                        var srcInfo = new FileInfo(file);
+                        var dstInfo = new FileInfo(destFile);
+                        if (srcInfo.Length != dstInfo.Length || srcInfo.LastWriteTimeUtc != dstInfo.LastWriteTimeUtc)
+                        {
+                            return false;
+                        }
+                    }
+                }
+                else if (File.Exists(expandedSource))
+                {
+                    var relative = GetDriveLetterRelativePath(expandedSource);
+                    var destFile = Path.Combine(appDest, relative);
+                    if (!File.Exists(destFile))
+                    {
+                        return false;
+                    }
+
+                    var srcInfo = new FileInfo(expandedSource);
+                    var dstInfo = new FileInfo(destFile);
+                    if (srcInfo.Length != dstInfo.Length || srcInfo.LastWriteTimeUtc != dstInfo.LastWriteTimeUtc)
+                    {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+
+        public async Task SyncAsync(
+        IEnumerable<AppConfig> configs,
+        string destinationRoot,
+        IProgress<int>? progress = null,
+        Action<AppConfig, SyncStatus>? perAppStatusCallback = null)
+        {
+            var appList = configs.Where(app => !string.IsNullOrWhiteSpace(app.Id)).ToList();
             int totalPaths = appList.Sum(app => app.Paths?.Count ?? 0);
             if (totalPaths == 0)
             {
@@ -49,15 +102,25 @@ namespace BackupWarden.Services.Business
 
             foreach (var app in appList)
             {
+                perAppStatusCallback?.Invoke(app, SyncStatus.Syncing);
                 var appDest = Path.Combine(destinationRoot, app.Id);
 
-                // Report progress after each path
-                await SyncPathsAsync(app.Paths, appDest, () =>
+                try
                 {
-                    processedPaths++;
-                    int percent = (int)(processedPaths / (double)totalPaths * 100);
-                    progress?.Report(percent);
-                });
+                    await SyncPathsAsync(app.Paths, appDest, () =>
+                    {
+                        processedPaths++;
+                        int percent = (int)(processedPaths / (double)totalPaths * 100);
+                        progress?.Report(percent);
+                    });
+
+                    perAppStatusCallback?.Invoke(app, SyncStatus.InSync);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error syncing app {AppId}", app.Id);
+                    perAppStatusCallback?.Invoke(app, SyncStatus.Failed);
+                }
             }
         }
 
