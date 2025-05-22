@@ -34,28 +34,47 @@ namespace BackupWarden.Services.Business
 
         public bool IsAppInSync(AppConfig app, string destinationRoot)
         {
-            if (string.IsNullOrWhiteSpace(app.Id))
+            try
             {
-                return false;
-            }
-
-            var appDest = Path.Combine(destinationRoot, app.Id);
-
-            foreach (var sourcePath in app.Paths)
-            {
-                var expandedSource = SpecialFolderUtil.ExpandSpecialFolders(sourcePath);
-                if (Directory.Exists(expandedSource))
+                if (string.IsNullOrWhiteSpace(app.Id))
                 {
-                    foreach (var file in Directory.EnumerateFiles(expandedSource, "*", SearchOption.AllDirectories))
+                    return false;
+                }
+
+                var appDest = Path.Combine(destinationRoot, app.Id);
+
+                foreach (var sourcePath in app.Paths)
+                {
+                    var expandedSource = SpecialFolderUtil.ExpandSpecialFolders(sourcePath);
+                    if (Directory.Exists(expandedSource))
                     {
-                        var relative = GetDriveLetterRelativePath(file);
+                        foreach (var file in Directory.EnumerateFiles(expandedSource, "*", SearchOption.AllDirectories))
+                        {
+                            var relative = GetDriveLetterRelativePath(file);
+                            var destFile = Path.Combine(appDest, relative);
+                            if (!File.Exists(destFile))
+                            {
+                                return false;
+                            }
+
+                            var srcInfo = new FileInfo(file);
+                            var dstInfo = new FileInfo(destFile);
+                            if (srcInfo.Length != dstInfo.Length || srcInfo.LastWriteTimeUtc != dstInfo.LastWriteTimeUtc)
+                            {
+                                return false;
+                            }
+                        }
+                    }
+                    else if (File.Exists(expandedSource))
+                    {
+                        var relative = GetDriveLetterRelativePath(expandedSource);
                         var destFile = Path.Combine(appDest, relative);
                         if (!File.Exists(destFile))
                         {
                             return false;
                         }
 
-                        var srcInfo = new FileInfo(file);
+                        var srcInfo = new FileInfo(expandedSource);
                         var dstInfo = new FileInfo(destFile);
                         if (srcInfo.Length != dstInfo.Length || srcInfo.LastWriteTimeUtc != dstInfo.LastWriteTimeUtc)
                         {
@@ -63,24 +82,13 @@ namespace BackupWarden.Services.Business
                         }
                     }
                 }
-                else if (File.Exists(expandedSource))
-                {
-                    var relative = GetDriveLetterRelativePath(expandedSource);
-                    var destFile = Path.Combine(appDest, relative);
-                    if (!File.Exists(destFile))
-                    {
-                        return false;
-                    }
-
-                    var srcInfo = new FileInfo(expandedSource);
-                    var dstInfo = new FileInfo(destFile);
-                    if (srcInfo.Length != dstInfo.Length || srcInfo.LastWriteTimeUtc != dstInfo.LastWriteTimeUtc)
-                    {
-                        return false;
-                    }
-                }
+                return true;
             }
-            return true;
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking sync status for app {AppId}", app?.Id);
+                return false;
+            }
         }
 
 
@@ -203,6 +211,104 @@ namespace BackupWarden.Services.Business
                 File.SetLastWriteTimeUtc(destFile, fileInfoSource.LastWriteTimeUtc);
             }
             sourceFiles.Add(destFile);
+        }
+
+        public async Task RestoreAsync(
+    IEnumerable<AppConfig> configs,
+    string destinationRoot,
+    IProgress<int>? progress = null,
+    Action<AppConfig, SyncStatus>? perAppStatusCallback = null)
+        {
+            var appList = configs.Where(app => !string.IsNullOrWhiteSpace(app.Id)).ToList();
+            int totalPaths = appList.Sum(app => app.Paths.Count);
+            if (totalPaths == 0)
+            {
+                _logger.LogWarning("No paths to restore found in the provided configurations.");
+                progress?.Report(100);
+                return;
+            }
+            _logger.LogWarning("Total paths to restore: {TotalPaths}", totalPaths);
+
+            int processedPaths = 0;
+
+            foreach (var app in appList)
+            {
+                perAppStatusCallback?.Invoke(app, SyncStatus.Syncing);
+                var appDest = Path.Combine(destinationRoot, app.Id);
+
+                try
+                {
+                    await RestorePathsAsync(app.Paths, appDest, () =>
+                    {
+                        processedPaths++;
+                        int percent = (int)(processedPaths / (double)totalPaths * 100);
+                        progress?.Report(percent);
+                    });
+
+                    perAppStatusCallback?.Invoke(app, SyncStatus.InSync);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error restoring app {AppId}", app.Id);
+                    perAppStatusCallback?.Invoke(app, SyncStatus.Failed);
+                }
+            }
+        }
+
+        private static async Task RestorePathsAsync(IEnumerable<string> sourcePaths, string backupRoot, Action? onPathProcessed = null)
+        {
+            var expandedPaths = sourcePaths.Select(SpecialFolderUtil.ExpandSpecialFolders).ToList();
+
+            foreach (var sourcePath in expandedPaths)
+            {
+                if (sourcePath.EndsWith('\\') || sourcePath.EndsWith('/'))
+                {
+                    var dirPath = sourcePath.TrimEnd('\\', '/');
+                    await RestoreDirectoryAsync(dirPath, backupRoot);
+                }
+                else
+                {
+                    await RestoreFileAsync(sourcePath, backupRoot);
+                }
+                onPathProcessed?.Invoke();
+            }
+        }
+
+        private static async Task RestoreDirectoryAsync(string sourceDir, string backupRoot)
+        {
+            // The backup directory is under backupRoot\<AppId>\<DriveLetter>\<relative path>
+            var driveLetter = Path.GetPathRoot(sourceDir)?[0].ToString();
+            var relativeDir = GetDriveLetterRelativePath(sourceDir);
+            var backupDir = Path.Combine(backupRoot, relativeDir);
+
+            if (Directory.Exists(backupDir))
+            {
+                foreach (var file in Directory.EnumerateFiles(backupDir, "*", SearchOption.AllDirectories))
+                {
+                    var relative = Path.GetRelativePath(backupDir, file);
+                    var destFile = Path.Combine(sourceDir, relative);
+                    await RestoreFileInternalAsync(file, destFile);
+                }
+            }
+        }
+
+        private static async Task RestoreFileAsync(string sourceFile, string backupRoot)
+        {
+            var relative = GetDriveLetterRelativePath(sourceFile);
+            var backupFile = Path.Combine(backupRoot, relative);
+            await RestoreFileInternalAsync(backupFile, sourceFile);
+        }
+
+        private static async Task RestoreFileInternalAsync(string backupFile, string destFile)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(destFile)!);
+
+            if (File.Exists(backupFile))
+            {
+                await CopyFileAsync(backupFile, destFile);
+                var backupInfo = new FileInfo(backupFile);
+                File.SetLastWriteTimeUtc(destFile, backupInfo.LastWriteTimeUtc);
+            }
         }
 
         private static string GetDriveLetterRelativePath(string fullPath)
