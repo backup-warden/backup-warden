@@ -28,7 +28,6 @@ namespace BackupWarden.ViewModels
             set
             {
                 SetProperty(ref _destinationFolder, value);
-                SyncCommand.NotifyCanExecuteChanged();
             }
         }
 
@@ -39,7 +38,6 @@ namespace BackupWarden.ViewModels
             set
             {
                 SetProperty(ref _isSyncing, value);
-                SyncCommand.NotifyCanExecuteChanged();
             }
         }
 
@@ -100,6 +98,7 @@ namespace BackupWarden.ViewModels
 
             LoadAppSettings();
             LoadAppsFromConfigs();
+            MonitorPropertyChanged();
 
         }
 
@@ -110,13 +109,6 @@ namespace BackupWarden.ViewModels
             {
                 YamlFilePaths.Add(path);
             }
-
-            YamlFilePaths.CollectionChanged += (s, e) =>
-            {
-                _appSettingsService.SaveYamlFilePaths(YamlFilePaths);
-                SyncCommand.NotifyCanExecuteChanged();
-                LoadAppsFromConfigs();
-            };
         }
 
         private void LoadAppsFromConfigs()
@@ -132,8 +124,30 @@ namespace BackupWarden.ViewModels
                     LoadedApps.Add(app);
                 }
             }
-
             _ = CheckAppsSyncStatusAsync();
+        }
+
+        private void MonitorPropertyChanged()
+        {
+            YamlFilePaths.CollectionChanged += (s, e) =>
+            {
+                _appSettingsService.SaveYamlFilePaths(YamlFilePaths);
+                LoadAppsFromConfigs();
+                SyncCommand.NotifyCanExecuteChanged();
+            };
+
+            PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(DestinationFolder))
+                {
+                    SyncCommand.NotifyCanExecuteChanged();
+                    _ = CheckAppsSyncStatusAsync();
+                }
+                else if (e.PropertyName == nameof(IsSyncing))
+                {
+                    SyncCommand.NotifyCanExecuteChanged();
+                }
+            };
         }
 
         private async Task CheckAppsSyncStatusAsync()
