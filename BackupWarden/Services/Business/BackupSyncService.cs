@@ -14,8 +14,8 @@ namespace BackupWarden.Services.Business
 {
     public interface IBackupSyncService
     {
-        bool IsAppInSync(AppConfig app, string destinationRoot);
-
+        Task UpdateSyncStatusAsync(IEnumerable<AppConfig> apps, string destinationRoot, Action<AppConfig, SyncStatus>? perAppStatusCallback = null);
+        Task RestoreAsync(IEnumerable<AppConfig> configs, string destinationRoot, IProgress<int>? progress = null, Action<AppConfig, SyncStatus>? perAppStatusCallback = null);
         Task SyncAsync(IEnumerable<AppConfig> configs, string destinationRoot, IProgress<int>? progress = null, Action<AppConfig, SyncStatus>? perAppStatusCallback = null);
     }
 
@@ -32,63 +32,80 @@ namespace BackupWarden.Services.Business
             _logger = logger;
         }
 
-        public bool IsAppInSync(AppConfig app, string destinationRoot)
+        public async Task UpdateSyncStatusAsync(
+    IEnumerable<AppConfig> apps,
+    string destinationRoot,
+    Action<AppConfig, SyncStatus>? perAppStatusCallback = null)
         {
-            try
+            await Task.Run(() =>
             {
-                if (string.IsNullOrWhiteSpace(app.Id))
+                foreach (AppConfig app in apps)
                 {
-                    return false;
-                }
-
-                var appDest = Path.Combine(destinationRoot, app.Id);
-
-                foreach (var sourcePath in app.Paths)
-                {
-                    var expandedSource = SpecialFolderUtil.ExpandSpecialFolders(sourcePath);
-                    if (Directory.Exists(expandedSource))
+                    try
                     {
-                        foreach (var file in Directory.EnumerateFiles(expandedSource, "*", SearchOption.AllDirectories))
-                        {
-                            var relative = GetDriveLetterRelativePath(file);
-                            var destFile = Path.Combine(appDest, relative);
-                            if (!File.Exists(destFile))
-                            {
-                                return false;
-                            }
+                        var appDest = Path.Combine(destinationRoot, app.Id);
+                        bool inSync = true;
 
-                            var srcInfo = new FileInfo(file);
-                            var dstInfo = new FileInfo(destFile);
-                            if (srcInfo.Length != dstInfo.Length || srcInfo.LastWriteTimeUtc != dstInfo.LastWriteTimeUtc)
+                        foreach (var sourcePath in app.Paths)
+                        {
+                            var expandedSource = SpecialFolderUtil.ExpandSpecialFolders(sourcePath);
+
+                            if (expandedSource.EndsWith('\\') || expandedSource.EndsWith('/'))
                             {
-                                return false;
+                                var dirPath = expandedSource.TrimEnd('\\', '/');
+                                if (Directory.Exists(dirPath))
+                                {
+                                    foreach (var file in Directory.EnumerateFiles(dirPath, "*", SearchOption.AllDirectories))
+                                    {
+                                        var relative = GetDriveLetterRelativePath(file);
+                                        var destFile = Path.Combine(appDest, relative);
+                                        if (!File.Exists(destFile))
+                                        {
+                                            inSync = false;
+                                            break;
+                                        }
+
+                                        var srcInfo = new FileInfo(file);
+                                        var dstInfo = new FileInfo(destFile);
+                                        if (srcInfo.Length != dstInfo.Length || srcInfo.LastWriteTimeUtc != dstInfo.LastWriteTimeUtc)
+                                        {
+                                            inSync = false;
+                                            break;
+                                        }
+                                    }
+                                }
                             }
+                            else if (File.Exists(expandedSource))
+                            {
+                                var relative = GetDriveLetterRelativePath(expandedSource);
+                                var destFile = Path.Combine(appDest, relative);
+                                if (!File.Exists(destFile))
+                                {
+                                    inSync = false;
+                                    break;
+                                }
+
+                                var srcInfo = new FileInfo(expandedSource);
+                                var dstInfo = new FileInfo(destFile);
+                                if (srcInfo.Length != dstInfo.Length || srcInfo.LastWriteTimeUtc != dstInfo.LastWriteTimeUtc)
+                                {
+                                    inSync = false;
+                                    break;
+                                }
+                            }
+                            if (!inSync)
+                                break;
                         }
+
+                        perAppStatusCallback?.Invoke(app, inSync ? SyncStatus.InSync : SyncStatus.OutOfSync);
                     }
-                    else if (File.Exists(expandedSource))
+                    catch (Exception ex)
                     {
-                        var relative = GetDriveLetterRelativePath(expandedSource);
-                        var destFile = Path.Combine(appDest, relative);
-                        if (!File.Exists(destFile))
-                        {
-                            return false;
-                        }
-
-                        var srcInfo = new FileInfo(expandedSource);
-                        var dstInfo = new FileInfo(destFile);
-                        if (srcInfo.Length != dstInfo.Length || srcInfo.LastWriteTimeUtc != dstInfo.LastWriteTimeUtc)
-                        {
-                            return false;
-                        }
+                        _logger.LogError(ex, "Error checking sync status for app {AppId}", app?.Id);
+                        perAppStatusCallback?.Invoke(app!, SyncStatus.Failed);
                     }
                 }
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error checking sync status for app {AppId}", app?.Id);
-                return false;
-            }
+            });
         }
 
 
@@ -98,40 +115,43 @@ namespace BackupWarden.Services.Business
         IProgress<int>? progress = null,
         Action<AppConfig, SyncStatus>? perAppStatusCallback = null)
         {
-            var appList = configs.Where(app => !string.IsNullOrWhiteSpace(app.Id)).ToList();
-            int totalPaths = appList.Sum(app => app.Paths.Count);
-            if (totalPaths == 0)
+            await Task.Run(async () =>
             {
-                _logger.LogWarning("No paths to sync found in the provided configurations.");
-                progress?.Report(100);
-                return;
-            }
-            _logger.LogWarning("Total paths to sync: {TotalPaths}", totalPaths);
-
-            int processedPaths = 0;
-
-            foreach (var app in appList)
-            {
-                perAppStatusCallback?.Invoke(app, SyncStatus.Syncing);
-                var appDest = Path.Combine(destinationRoot, app.Id);
-
-                try
+                var appList = configs.ToList();
+                int totalPaths = appList.Sum(app => app.Paths.Count);
+                if (totalPaths == 0)
                 {
-                    await SyncPathsAsync(app.Paths, appDest, () =>
+                    _logger.LogWarning("No paths to sync found in the provided configurations.");
+                    progress?.Report(100);
+                    return;
+                }
+                _logger.LogWarning("Total paths to sync: {TotalPaths}", totalPaths);
+
+                int processedPaths = 0;
+
+                foreach (var app in appList)
+                {
+                    perAppStatusCallback?.Invoke(app, SyncStatus.Syncing);
+                    var appDest = Path.Combine(destinationRoot, app.Id);
+
+                    try
                     {
-                        processedPaths++;
-                        int percent = (int)(processedPaths / (double)totalPaths * 100);
-                        progress?.Report(percent);
-                    });
+                        await SyncPathsAsync(app.Paths, appDest, () =>
+                        {
+                            processedPaths++;
+                            int percent = (int)(processedPaths / (double)totalPaths * 100);
+                            progress?.Report(percent);
+                        });
 
-                    perAppStatusCallback?.Invoke(app, SyncStatus.InSync);
+                        perAppStatusCallback?.Invoke(app, SyncStatus.InSync);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error syncing app {AppId}", app.Id);
+                        perAppStatusCallback?.Invoke(app, SyncStatus.Failed);
+                    }
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error syncing app {AppId}", app.Id);
-                    perAppStatusCallback?.Invoke(app, SyncStatus.Failed);
-                }
-            }
+            });
         }
 
         private static async Task SyncPathsAsync(IEnumerable<string> sourcePaths, string destinationRoot, Action? onPathProcessed = null)
@@ -219,7 +239,7 @@ namespace BackupWarden.Services.Business
     IProgress<int>? progress = null,
     Action<AppConfig, SyncStatus>? perAppStatusCallback = null)
         {
-            var appList = configs.Where(app => !string.IsNullOrWhiteSpace(app.Id)).ToList();
+            var appList = configs.ToList();
             int totalPaths = appList.Sum(app => app.Paths.Count);
             if (totalPaths == 0)
             {

@@ -149,7 +149,19 @@
                             </ListView.ItemTemplate>
                         </ListView>
                     </StackPanel>
-                    <Button Grid.Row="1" Content="Restore" />
+                    <StackPanel
+                        Grid.Row="1"
+                        HorizontalAlignment="Left"
+                        Orientation="Horizontal"
+                        Spacing="4">
+                        <Button Command="{x:Bind ViewModel.RestoreCommand, Mode=OneWay}" Content="Restore" />
+                        <ProgressBar
+                            Width="150"
+                            Maximum="100"
+                            Minimum="0"
+                            Visibility="{x:Bind ViewModel.IsRestoring, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                            Value="{x:Bind ViewModel.RestoreProgress, Mode=OneWay}" />
+                    </StackPanel>
                 </Grid>
             </Grid>
         </ScrollViewer>

@@ -16,9 +16,10 @@ namespace BackupWarden.ViewModels
 {
     public partial class MainViewModel : ObservableObject
     {
-        public ObservableCollection<AppConfig> LoadedApps { get; } = [];
-
         public ObservableCollection<string> YamlFilePaths { get; } = [];
+        public ObservableCollection<AppConfig> LoadedApps { get; } = [];
+        public ObservableCollection<AppConfig> SelectedApps { get; set; } = [];
+
 
         private string? _destinationFolder;
 
@@ -51,8 +52,25 @@ namespace BackupWarden.ViewModels
             }
         }
 
-        public ObservableCollection<AppConfig> SelectedApps { get; set; } = [];
+        private bool _isRestoring;
+        public bool IsRestoring
+        {
+            get => _isRestoring;
+            set
+            {
+                SetProperty(ref _isRestoring, value);
+            }
+        }
 
+        private int _restoreProgress;
+        public int RestoreProgress
+        {
+            get => _restoreProgress;
+            set
+            {
+                SetProperty(ref _restoreProgress, value);
+            }
+        }
 
         private readonly IYamlConfigService _yamlConfigService;
         private readonly IAppSettingsService _appSettingsService;
@@ -65,12 +83,14 @@ namespace BackupWarden.ViewModels
 
         private readonly Progress<int> _syncProgressReporter;
         private readonly ContextCallback<AppConfig, SyncStatus> _syncStatusDispatcher;
+        private readonly Progress<int> _restoreProgressReporter;
 
 
         public IAsyncRelayCommand AddYamlFileCommand { get; }
         public IAsyncRelayCommand SyncCommand { get; }
         public IAsyncRelayCommand BrowseDestinationFolderCommand { get; }
         public IRelayCommand<string> RemoveYamlFileCommand { get; }
+        public IAsyncRelayCommand RestoreCommand { get; }
 
         public MainViewModel(
             IAppSettingsService appSettingsService,
@@ -89,12 +109,14 @@ namespace BackupWarden.ViewModels
             _logger = logger;
 
             _syncProgressReporter = new Progress<int>(percent => SyncProgress = percent);
+            _restoreProgressReporter = new Progress<int>(percent => RestoreProgress = percent);
             _syncStatusDispatcher = new ContextCallback<AppConfig, SyncStatus>((app, status) => app.SyncStatus = status);
 
-            AddYamlFileCommand = new AsyncRelayCommand(AddYamlFileAsync);
-            BrowseDestinationFolderCommand = new AsyncRelayCommand(BrowseDestinationFolderAsync);
+            AddYamlFileCommand = new AsyncRelayCommand(AddYamlFileAsync, CanModifySettings);
+            RemoveYamlFileCommand = new RelayCommand<string?>(RemoveYamlFile, (_) => CanModifySettings());
+            BrowseDestinationFolderCommand = new AsyncRelayCommand(BrowseDestinationFolderAsync, CanModifySettings);
             SyncCommand = new AsyncRelayCommand(SyncAsync, CanSync);
-            RemoveYamlFileCommand = new RelayCommand<string>(RemoveYamlFile);
+            RestoreCommand = new AsyncRelayCommand(RestoreAsync, CanRestore);
 
             LoadAppSettings();
             LoadAppsFromConfigs();
@@ -119,7 +141,7 @@ namespace BackupWarden.ViewModels
                 .Select(_yamlConfigService.LoadConfig)
                 .Where(cfg => cfg is not null))
             {
-                foreach (var app in config.Apps.Where(w => w.Paths.Count > 0))
+                foreach (var app in config.Apps.Where(w => !string.IsNullOrWhiteSpace(w.Id) && w.Paths.Count > 0))
                 {
                     LoadedApps.Add(app);
                 }
@@ -133,7 +155,16 @@ namespace BackupWarden.ViewModels
             {
                 _appSettingsService.SaveYamlFilePaths(YamlFilePaths);
                 LoadAppsFromConfigs();
+            };
+
+            LoadedApps.CollectionChanged += (s, e) =>
+            {
                 SyncCommand.NotifyCanExecuteChanged();
+            };
+
+            SelectedApps.CollectionChanged += (s, e) =>
+            {
+                RestoreCommand.NotifyCanExecuteChanged();
             };
 
             PropertyChanged += (s, e) =>
@@ -141,13 +172,33 @@ namespace BackupWarden.ViewModels
                 if (e.PropertyName == nameof(DestinationFolder))
                 {
                     SyncCommand.NotifyCanExecuteChanged();
+                    RestoreCommand.NotifyCanExecuteChanged();
                     _ = CheckAppsSyncStatusAsync();
                 }
-                else if (e.PropertyName == nameof(IsSyncing))
+                else if (e.PropertyName == nameof(IsSyncing) || (e.PropertyName == nameof(IsRestoring)))
                 {
                     SyncCommand.NotifyCanExecuteChanged();
+                    RestoreCommand.NotifyCanExecuteChanged();
+                    AddYamlFileCommand.NotifyCanExecuteChanged();
+                    BrowseDestinationFolderCommand.NotifyCanExecuteChanged();
+                    RemoveYamlFileCommand.NotifyCanExecuteChanged();
                 }
             };
+        }
+
+        private bool CanSync()
+        {
+            return !IsSyncing && !IsRestoring && LoadedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
+        }
+
+        private bool CanModifySettings()
+        {
+            return !IsSyncing && !IsRestoring;
+        }
+
+        private bool CanRestore()
+        {
+            return !IsSyncing && !IsRestoring && SelectedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
         }
 
         private async Task CheckAppsSyncStatusAsync()
@@ -156,16 +207,8 @@ namespace BackupWarden.ViewModels
             {
                 return;
             }
-            foreach (var app in LoadedApps)
-            {
-                await Task.Run(() =>
-                {
-                    var status = _backupSyncService.IsAppInSync(app, DestinationFolder)
-                       ? SyncStatus.InSync
-                       : SyncStatus.OutOfSync;
-                    _syncStatusDispatcher.Invoke(app, status);
-                });
-            }
+            UpdateSyncStatusToUnknown(LoadedApps);
+            await _backupSyncService.UpdateSyncStatusAsync(LoadedApps, DestinationFolder, _syncStatusDispatcher.Invoke);
         }
 
         private async Task AddYamlFileAsync()
@@ -189,11 +232,6 @@ namespace BackupWarden.ViewModels
                 _logger.LogError(ex, "An error occurred while adding YAML files.");
                 await _dialogService.ShowErrorAsync("An error occurred. Please check the logs for details.");
             }
-        }
-
-        private bool CanSync()
-        {
-            return !IsSyncing && YamlFilePaths.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
         }
 
         private async Task BrowseDestinationFolderAsync()
@@ -229,6 +267,7 @@ namespace BackupWarden.ViewModels
             SyncProgress = 0;
             try
             {
+                UpdateSyncStatusToUnknown(LoadedApps);
                 await _backupSyncService.SyncAsync(
                     LoadedApps,
                     DestinationFolder!,
@@ -243,6 +282,39 @@ namespace BackupWarden.ViewModels
             {
                 IsSyncing = false;
                 _logger.LogWarning("Sync finished.");
+            }
+        }
+
+        private async Task RestoreAsync()
+        {
+            _logger.LogWarning("Restore started.");
+            IsRestoring = true;
+            RestoreProgress = 0;
+            try
+            {
+                UpdateSyncStatusToUnknown(SelectedApps);
+                await _backupSyncService.RestoreAsync(
+                    SelectedApps,
+                    DestinationFolder!,
+                    _restoreProgressReporter, _syncStatusDispatcher.Invoke);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred during restore.");
+                await _dialogService.ShowErrorAsync("An error occurred during restoration. Please check the logs for details.");
+            }
+            finally
+            {
+                IsRestoring = false;
+                _logger.LogWarning("Restore finished.");
+            }
+        }
+
+        private static void UpdateSyncStatusToUnknown(ObservableCollection<AppConfig> appConfigs)
+        {
+            foreach (var app in appConfigs)
+            {
+                app.SyncStatus = SyncStatus.Unknown;
             }
         }
     }

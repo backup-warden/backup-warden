@@ -15,7 +15,7 @@ namespace BackupWarden.Converters
                 {
                     SyncStatus.InSync => "\uE73E",      // Checkmark
                     SyncStatus.OutOfSync => "\uEA6A",   // Cancel
-                    SyncStatus.Syncing => "\uE8F6",     // Sync
+                    SyncStatus.Syncing => "\uE895",     // Sync
                     SyncStatus.Failed => "\uEA39",      // Error
                     _ => "\uE9CE",                      // Help/Unknown
                 };
