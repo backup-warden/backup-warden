@@ -32,6 +32,16 @@ namespace BackupWarden.ViewModels
             }
         }
 
+        private bool _isUpdatingSyncStatus;
+        public bool IsUpdatingSyncStatus
+        {
+            get => _isUpdatingSyncStatus;
+            set
+            {
+                SetProperty(ref _isUpdatingSyncStatus, value);
+            }
+        }
+
         private bool _isSyncing;
         public bool IsSyncing
         {
@@ -151,12 +161,6 @@ namespace BackupWarden.ViewModels
 
         private void MonitorPropertyChanged()
         {
-            YamlFilePaths.CollectionChanged += (s, e) =>
-            {
-                _appSettingsService.SaveYamlFilePaths(YamlFilePaths);
-                LoadAppsFromConfigs();
-            };
-
             LoadedApps.CollectionChanged += (s, e) =>
             {
                 SyncCommand.NotifyCanExecuteChanged();
@@ -169,13 +173,12 @@ namespace BackupWarden.ViewModels
 
             PropertyChanged += (s, e) =>
             {
-                if (e.PropertyName == nameof(DestinationFolder))
+                if (e.PropertyName is nameof(DestinationFolder))
                 {
                     SyncCommand.NotifyCanExecuteChanged();
                     RestoreCommand.NotifyCanExecuteChanged();
-                    _ = CheckAppsSyncStatusAsync();
                 }
-                else if (e.PropertyName == nameof(IsSyncing) || (e.PropertyName == nameof(IsRestoring)))
+                else if (e.PropertyName is nameof(IsSyncing) or nameof(IsRestoring) or nameof(IsUpdatingSyncStatus))
                 {
                     SyncCommand.NotifyCanExecuteChanged();
                     RestoreCommand.NotifyCanExecuteChanged();
@@ -188,17 +191,17 @@ namespace BackupWarden.ViewModels
 
         private bool CanSync()
         {
-            return !IsSyncing && !IsRestoring && LoadedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
+            return !IsUpdatingSyncStatus && !IsSyncing && !IsRestoring && LoadedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
         }
 
         private bool CanModifySettings()
         {
-            return !IsSyncing && !IsRestoring;
+            return !IsUpdatingSyncStatus && !IsSyncing && !IsRestoring;
         }
 
         private bool CanRestore()
         {
-            return !IsSyncing && !IsRestoring && SelectedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
+            return !IsUpdatingSyncStatus && !IsSyncing && !IsRestoring && SelectedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
         }
 
         private async Task CheckAppsSyncStatusAsync()
@@ -207,8 +210,21 @@ namespace BackupWarden.ViewModels
             {
                 return;
             }
-            UpdateSyncStatusToUnknown(LoadedApps);
-            await _backupSyncService.UpdateSyncStatusAsync(LoadedApps, DestinationFolder, _syncStatusDispatcher.Invoke);
+            try
+            {
+                IsUpdatingSyncStatus = true;
+                UpdateSyncStatusToUnknown(LoadedApps);
+                await _backupSyncService.UpdateSyncStatusAsync(LoadedApps, DestinationFolder, _syncStatusDispatcher.Invoke);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while checking Apps Sync Status.");
+                await _dialogService.ShowErrorAsync("An error occurred while checking Apps Sync Status. Please check the logs for details.");
+            }
+            finally
+            {
+                IsUpdatingSyncStatus = false;
+            }
         }
 
         private async Task AddYamlFileAsync()
@@ -225,6 +241,8 @@ namespace BackupWarden.ViewModels
                             YamlFilePaths.Add(file);
                         }
                     }
+                    _appSettingsService.SaveYamlFilePaths(YamlFilePaths);
+                    LoadAppsFromConfigs();
                 }
             }
             catch (Exception ex)
@@ -243,6 +261,7 @@ namespace BackupWarden.ViewModels
                 {
                     DestinationFolder = folder;
                     _appSettingsService.SaveDestinationFolder(folder);
+                    _ = CheckAppsSyncStatusAsync();
                 }
             }
             catch (Exception ex)
@@ -254,9 +273,10 @@ namespace BackupWarden.ViewModels
 
         private void RemoveYamlFile(string? filePath)
         {
-            if (!string.IsNullOrEmpty(filePath) && YamlFilePaths.Contains(filePath))
+            if (!string.IsNullOrEmpty(filePath) && YamlFilePaths.Remove(filePath))
             {
-                YamlFilePaths.Remove(filePath);
+                _appSettingsService.SaveYamlFilePaths(YamlFilePaths);
+                LoadAppsFromConfigs();
             }
         }
 

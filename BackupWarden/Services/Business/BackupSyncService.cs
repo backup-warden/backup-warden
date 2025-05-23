@@ -239,84 +239,113 @@ namespace BackupWarden.Services.Business
     IProgress<int>? progress = null,
     Action<AppConfig, SyncStatus>? perAppStatusCallback = null)
         {
-            var appList = configs.ToList();
-            int totalPaths = appList.Sum(app => app.Paths.Count);
-            if (totalPaths == 0)
+            await Task.Run(async () =>
             {
-                _logger.LogWarning("No paths to restore found in the provided configurations.");
-                progress?.Report(100);
-                return;
-            }
-            _logger.LogWarning("Total paths to restore: {TotalPaths}", totalPaths);
+                var appList = configs.ToList();
+                int totalFiles = 0;
+                var appFileMap = new Dictionary<AppConfig, List<string>>();
 
-            int processedPaths = 0;
+                // Precompute expanded and normalized paths for each app
+                var appPathMap = new Dictionary<AppConfig, List<(string Path, bool IsDirectory)>>();
 
-            foreach (var app in appList)
-            {
-                perAppStatusCallback?.Invoke(app, SyncStatus.Syncing);
-                var appDest = Path.Combine(destinationRoot, app.Id);
-
-                try
+                foreach (var app in appList)
                 {
-                    await RestorePathsAsync(app.Paths, appDest, () =>
+                    var expandedPaths = app.Paths
+                        .Select(SpecialFolderUtil.ExpandSpecialFolders)
+                        .Where(p => !string.IsNullOrWhiteSpace(p))
+                        .Select(p => (
+                            Path: Path.GetFullPath(p.TrimEnd('\\', '/')),
+                            IsDirectory: p.EndsWith('\\') || p.EndsWith('/')
+                        ))
+                        .ToList();
+                    appPathMap[app] = expandedPaths;
+                }
+
+                foreach (var app in appList)
+                {
+                    var appBackupRoot = Path.Combine(destinationRoot, app.Id);
+                    var files = new List<string>();
+                    if (Directory.Exists(appBackupRoot))
                     {
-                        processedPaths++;
-                        int percent = (int)(processedPaths / (double)totalPaths * 100);
-                        progress?.Report(percent);
-                    });
-
-                    perAppStatusCallback?.Invoke(app, SyncStatus.InSync);
+                        files = [.. Directory.EnumerateFiles(appBackupRoot, "*", SearchOption.AllDirectories)];
+                    }
+                    appFileMap[app] = files;
+                    totalFiles += files.Count;
                 }
-                catch (Exception ex)
+
+                if (totalFiles == 0)
                 {
-                    _logger.LogError(ex, "Error restoring app {AppId}", app.Id);
-                    perAppStatusCallback?.Invoke(app, SyncStatus.Failed);
+                    _logger.LogWarning("No files to restore found in the provided backup directories.");
+                    progress?.Report(100);
+                    return;
                 }
-            }
-        }
+                _logger.LogWarning("Total files to restore: {TotalFiles}", totalFiles);
 
-        private static async Task RestorePathsAsync(IEnumerable<string> sourcePaths, string backupRoot, Action? onPathProcessed = null)
-        {
-            var expandedPaths = sourcePaths.Select(SpecialFolderUtil.ExpandSpecialFolders).ToList();
+                int processedFiles = 0;
 
-            foreach (var sourcePath in expandedPaths)
-            {
-                if (sourcePath.EndsWith('\\') || sourcePath.EndsWith('/'))
+                foreach (var app in appList)
                 {
-                    var dirPath = sourcePath.TrimEnd('\\', '/');
-                    await RestoreDirectoryAsync(dirPath, backupRoot);
-                }
-                else
-                {
-                    await RestoreFileAsync(sourcePath, backupRoot);
-                }
-                onPathProcessed?.Invoke();
-            }
-        }
+                    perAppStatusCallback?.Invoke(app, SyncStatus.Syncing);
+                    var appBackupRoot = Path.Combine(destinationRoot, app.Id);
+                    var files = appFileMap[app];
+                    var mappedPaths = appPathMap[app];
 
-        private static async Task RestoreDirectoryAsync(string sourceDir, string backupRoot)
-        {
-            // The backup directory is under backupRoot\<AppId>\<DriveLetter>\<relative path>
-            var driveLetter = Path.GetPathRoot(sourceDir)?[0].ToString();
-            var relativeDir = GetDriveLetterRelativePath(sourceDir);
-            var backupDir = Path.Combine(backupRoot, relativeDir);
+                    try
+                    {
+                        foreach (var backupFile in files)
+                        {
+                            // Get the relative path inside the backup (e.g., C/Users/olduser/Documents/file.txt)
+                            var relativePath = Path.GetRelativePath(appBackupRoot, backupFile);
 
-            if (Directory.Exists(backupDir))
-            {
-                foreach (var file in Directory.EnumerateFiles(backupDir, "*", SearchOption.AllDirectories))
-                {
-                    var relative = Path.GetRelativePath(backupDir, file);
-                    var destFile = Path.Combine(sourceDir, relative);
-                    await RestoreFileInternalAsync(file, destFile);
+                            // Map the relative path to the current user's profile if it matches a user profile pattern
+                            var restorePath = SpecialFolderUtil.MapBackupUserPathToCurrentUser(relativePath);
+
+                            // Ensure the drive letter is rooted (e.g., C\Users\currentuser\Documents\file.txt)
+                            string destFile;
+                            if (Path.IsPathRooted(restorePath))
+                            {
+                                destFile = restorePath;
+                            }
+                            else
+                            {
+                                // Assume Windows drive letter at the start (e.g., C\...)
+                                var driveLetter = restorePath.Length > 1 && restorePath[1] == Path.DirectorySeparatorChar
+                                    ? $"{restorePath[0]}:{restorePath[1..]}"
+                                    : restorePath;
+                                destFile = driveLetter;
+                            }
+                            destFile = Path.GetFullPath(destFile);
+
+                            // Only restore if destFile is under one of the mapped paths
+                            bool shouldRestore = mappedPaths.Any(mp =>
+                                mp.IsDirectory
+                                    ? destFile.StartsWith(mp.Path + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                                    : string.Equals(destFile, mp.Path, StringComparison.OrdinalIgnoreCase)
+                            );
+
+                            if (!shouldRestore)
+                            {
+                                continue;
+                            }
+
+                            Directory.CreateDirectory(Path.GetDirectoryName(destFile)!);
+
+                            await RestoreFileInternalAsync(backupFile, destFile);
+
+                            processedFiles++;
+                            int percent = (int)(processedFiles / (double)totalFiles * 100);
+                            progress?.Report(percent);
+                        }
+
+                        perAppStatusCallback?.Invoke(app, SyncStatus.InSync);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error restoring app {AppId}", app.Id);
+                        perAppStatusCallback?.Invoke(app, SyncStatus.Failed);
+                    }
                 }
-            }
-        }
-
-        private static async Task RestoreFileAsync(string sourceFile, string backupRoot)
-        {
-            var relative = GetDriveLetterRelativePath(sourceFile);
-            var backupFile = Path.Combine(backupRoot, relative);
-            await RestoreFileInternalAsync(backupFile, sourceFile);
+            });
         }
 
         private static async Task RestoreFileInternalAsync(string backupFile, string destFile)
