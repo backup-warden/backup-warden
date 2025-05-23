@@ -16,7 +16,7 @@ namespace BackupWarden.Services.Business
     {
         Task UpdateSyncStatusAsync(IEnumerable<AppConfig> apps, string destinationRoot, Action<AppConfig, SyncStatus>? perAppStatusCallback = null);
         Task RestoreAsync(IEnumerable<AppConfig> configs, string destinationRoot, IProgress<int>? progress = null, Action<AppConfig, SyncStatus>? perAppStatusCallback = null);
-        Task SyncAsync(IEnumerable<AppConfig> configs, string destinationRoot, IProgress<int>? progress = null, Action<AppConfig, SyncStatus>? perAppStatusCallback = null);
+        Task BackupAsync(IEnumerable<AppConfig> configs, string destinationRoot, IProgress<int>? progress = null, Action<AppConfig, SyncStatus>? perAppStatusCallback = null);
     }
 
     public class BackupSyncService : IBackupSyncService
@@ -109,7 +109,7 @@ namespace BackupWarden.Services.Business
         }
 
 
-        public async Task SyncAsync(
+        public async Task BackupAsync(
         IEnumerable<AppConfig> configs,
         string destinationRoot,
         IProgress<int>? progress = null,
@@ -136,7 +136,7 @@ namespace BackupWarden.Services.Business
 
                     try
                     {
-                        await SyncPathsAsync(app.Paths, appDest, () =>
+                        await BackupPathsAsync(app.Paths, appDest, () =>
                         {
                             processedPaths++;
                             int percent = (int)(processedPaths / (double)totalPaths * 100);
@@ -154,7 +154,7 @@ namespace BackupWarden.Services.Business
             });
         }
 
-        private static async Task SyncPathsAsync(IEnumerable<string> sourcePaths, string destinationRoot, Action? onPathProcessed = null)
+        private static async Task BackupPathsAsync(IEnumerable<string> sourcePaths, string destinationRoot, Action? onPathProcessed = null)
         {
             var sourceFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var expandedPaths = sourcePaths.Select(SpecialFolderUtil.ExpandSpecialFolders).ToList();
@@ -166,12 +166,12 @@ namespace BackupWarden.Services.Business
                     var dirPath = sourcePath.TrimEnd('\\', '/');
                     if (Directory.Exists(dirPath))
                     {
-                        await SyncDirectoryAsync(dirPath, destinationRoot, sourceFiles);
+                        await BackupDirectoryAsync(dirPath, destinationRoot, sourceFiles);
                     }
                 }
                 else if (File.Exists(sourcePath))
                 {
-                    await SyncFileAsync(sourcePath, destinationRoot, sourceFiles);
+                    await BackupFileAsync(sourcePath, destinationRoot, sourceFiles);
                 }
                 onPathProcessed?.Invoke();
             }
@@ -199,24 +199,24 @@ namespace BackupWarden.Services.Business
             }
         }
 
-        private static async Task SyncDirectoryAsync(string sourceDir, string destinationRoot, HashSet<string> sourceFiles)
+        private static async Task BackupDirectoryAsync(string sourceDir, string destinationRoot, HashSet<string> sourceFiles)
         {
             foreach (var file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
             {
                 var relative = GetDriveLetterRelativePath(file);
                 var destFile = Path.Combine(destinationRoot, relative);
-                await SyncFileInternalAsync(file, destFile, sourceFiles);
+                await BackupFileInternalAsync(file, destFile, sourceFiles);
             }
         }
 
-        private static async Task SyncFileAsync(string sourceFile, string destinationRoot, HashSet<string> sourceFiles)
+        private static async Task BackupFileAsync(string sourceFile, string destinationRoot, HashSet<string> sourceFiles)
         {
             var relative = GetDriveLetterRelativePath(sourceFile);
             var destFile = Path.Combine(destinationRoot, relative);
-            await SyncFileInternalAsync(sourceFile, destFile, sourceFiles);
+            await BackupFileInternalAsync(sourceFile, destFile, sourceFiles);
         }
 
-        private static async Task SyncFileInternalAsync(string sourceFile, string destFile, HashSet<string> sourceFiles)
+        private static async Task BackupFileInternalAsync(string sourceFile, string destFile, HashSet<string> sourceFiles)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(destFile)!);
 

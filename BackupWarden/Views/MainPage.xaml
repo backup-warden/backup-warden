@@ -105,13 +105,13 @@
                         HorizontalAlignment="Left"
                         Orientation="Horizontal"
                         Spacing="4">
-                        <Button Command="{x:Bind ViewModel.SyncCommand, Mode=OneWay}" Content="Sync" />
+                        <Button Command="{x:Bind ViewModel.BackupCommand, Mode=OneWay}" Content="Backup" />
                         <ProgressBar
                             Width="150"
                             Maximum="100"
                             Minimum="0"
-                            Visibility="{x:Bind ViewModel.IsSyncing, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
-                            Value="{x:Bind ViewModel.SyncProgress, Mode=OneWay}" />
+                            Visibility="{x:Bind ViewModel.IsBackingUp, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                            Value="{x:Bind ViewModel.BackupProgress, Mode=OneWay}" />
                     </StackPanel>
                 </Grid>
                 <Grid

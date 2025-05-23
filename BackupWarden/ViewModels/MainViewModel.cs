@@ -42,23 +42,23 @@ namespace BackupWarden.ViewModels
             }
         }
 
-        private bool _isSyncing;
-        public bool IsSyncing
+        private bool _isBackingUp;
+        public bool IsBackingUp
         {
-            get => _isSyncing;
+            get => _isBackingUp;
             set
             {
-                SetProperty(ref _isSyncing, value);
+                SetProperty(ref _isBackingUp, value);
             }
         }
 
-        private int _syncProgress;
-        public int SyncProgress
+        private int _backupProgress;
+        public int BackupProgress
         {
-            get => _syncProgress;
+            get => _backupProgress;
             set
             {
-                SetProperty(ref _syncProgress, value);
+                SetProperty(ref _backupProgress, value);
             }
         }
 
@@ -91,13 +91,13 @@ namespace BackupWarden.ViewModels
 
         private readonly ILogger<MainViewModel> _logger;
 
-        private readonly Progress<int> _syncProgressReporter;
+        private readonly Progress<int> _backupProgressReporter;
         private readonly ContextCallback<AppConfig, SyncStatus> _syncStatusDispatcher;
         private readonly Progress<int> _restoreProgressReporter;
 
 
         public IAsyncRelayCommand AddYamlFileCommand { get; }
-        public IAsyncRelayCommand SyncCommand { get; }
+        public IAsyncRelayCommand BackupCommand { get; }
         public IAsyncRelayCommand BrowseDestinationFolderCommand { get; }
         public IRelayCommand<string> RemoveYamlFileCommand { get; }
         public IAsyncRelayCommand RestoreCommand { get; }
@@ -118,14 +118,14 @@ namespace BackupWarden.ViewModels
             _dialogService = dialogService;
             _logger = logger;
 
-            _syncProgressReporter = new Progress<int>(percent => SyncProgress = percent);
+            _backupProgressReporter = new Progress<int>(percent => BackupProgress = percent);
             _restoreProgressReporter = new Progress<int>(percent => RestoreProgress = percent);
             _syncStatusDispatcher = new ContextCallback<AppConfig, SyncStatus>((app, status) => app.SyncStatus = status);
 
             AddYamlFileCommand = new AsyncRelayCommand(AddYamlFileAsync, CanModifySettings);
             RemoveYamlFileCommand = new RelayCommand<string?>(RemoveYamlFile, (_) => CanModifySettings());
             BrowseDestinationFolderCommand = new AsyncRelayCommand(BrowseDestinationFolderAsync, CanModifySettings);
-            SyncCommand = new AsyncRelayCommand(SyncAsync, CanSync);
+            BackupCommand = new AsyncRelayCommand(BackupAsync, CanBackup);
             RestoreCommand = new AsyncRelayCommand(RestoreAsync, CanRestore);
 
             LoadAppSettings();
@@ -163,7 +163,7 @@ namespace BackupWarden.ViewModels
         {
             LoadedApps.CollectionChanged += (s, e) =>
             {
-                SyncCommand.NotifyCanExecuteChanged();
+                BackupCommand.NotifyCanExecuteChanged();
             };
 
             SelectedApps.CollectionChanged += (s, e) =>
@@ -175,12 +175,12 @@ namespace BackupWarden.ViewModels
             {
                 if (e.PropertyName is nameof(DestinationFolder))
                 {
-                    SyncCommand.NotifyCanExecuteChanged();
+                    BackupCommand.NotifyCanExecuteChanged();
                     RestoreCommand.NotifyCanExecuteChanged();
                 }
-                else if (e.PropertyName is nameof(IsSyncing) or nameof(IsRestoring) or nameof(IsUpdatingSyncStatus))
+                else if (e.PropertyName is nameof(IsBackingUp) or nameof(IsRestoring) or nameof(IsUpdatingSyncStatus))
                 {
-                    SyncCommand.NotifyCanExecuteChanged();
+                    BackupCommand.NotifyCanExecuteChanged();
                     RestoreCommand.NotifyCanExecuteChanged();
                     AddYamlFileCommand.NotifyCanExecuteChanged();
                     BrowseDestinationFolderCommand.NotifyCanExecuteChanged();
@@ -189,19 +189,19 @@ namespace BackupWarden.ViewModels
             };
         }
 
-        private bool CanSync()
+        private bool CanBackup()
         {
-            return !IsUpdatingSyncStatus && !IsSyncing && !IsRestoring && LoadedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
+            return !IsUpdatingSyncStatus && !IsBackingUp && !IsRestoring && LoadedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
         }
 
         private bool CanModifySettings()
         {
-            return !IsUpdatingSyncStatus && !IsSyncing && !IsRestoring;
+            return !IsUpdatingSyncStatus && !IsBackingUp && !IsRestoring;
         }
 
         private bool CanRestore()
         {
-            return !IsUpdatingSyncStatus && !IsSyncing && !IsRestoring && SelectedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
+            return !IsUpdatingSyncStatus && !IsBackingUp && !IsRestoring && SelectedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
         }
 
         private async Task CheckAppsSyncStatusAsync()
@@ -280,18 +280,18 @@ namespace BackupWarden.ViewModels
             }
         }
 
-        private async Task SyncAsync()
+        private async Task BackupAsync()
         {
             _logger.LogWarning("Sync started.");
-            IsSyncing = true;
-            SyncProgress = 0;
+            IsBackingUp = true;
+            BackupProgress = 0;
             try
             {
                 UpdateSyncStatusToUnknown(LoadedApps);
-                await _backupSyncService.SyncAsync(
+                await _backupSyncService.BackupAsync(
                     LoadedApps,
                     DestinationFolder!,
-                    _syncProgressReporter, _syncStatusDispatcher.Invoke);
+                    _backupProgressReporter, _syncStatusDispatcher.Invoke);
             }
             catch (Exception ex)
             {
@@ -300,7 +300,7 @@ namespace BackupWarden.ViewModels
             }
             finally
             {
-                IsSyncing = false;
+                IsBackingUp = false;
                 _logger.LogWarning("Sync finished.");
             }
         }
