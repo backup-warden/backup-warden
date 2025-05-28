@@ -33,53 +33,23 @@ namespace BackupWarden.ViewModels
             }
         }
 
-        private bool _isUpdatingSyncStatus;
-        public bool IsUpdatingSyncStatus
+        private bool _isRunning;
+        public bool IsRunning
         {
-            get => _isUpdatingSyncStatus;
+            get => _isRunning;
             set
             {
-                SetProperty(ref _isUpdatingSyncStatus, value);
+                SetProperty(ref _isRunning, value);
             }
         }
 
-        private bool _isBackingUp;
-        public bool IsBackingUp
+        private int _progress;
+        public int Progress
         {
-            get => _isBackingUp;
+            get => _progress;
             set
             {
-                SetProperty(ref _isBackingUp, value);
-            }
-        }
-
-        private int _backupProgress;
-        public int BackupProgress
-        {
-            get => _backupProgress;
-            set
-            {
-                SetProperty(ref _backupProgress, value);
-            }
-        }
-
-        private bool _isRestoring;
-        public bool IsRestoring
-        {
-            get => _isRestoring;
-            set
-            {
-                SetProperty(ref _isRestoring, value);
-            }
-        }
-
-        private int _restoreProgress;
-        public int RestoreProgress
-        {
-            get => _restoreProgress;
-            set
-            {
-                SetProperty(ref _restoreProgress, value);
+                SetProperty(ref _progress, value);
             }
         }
 
@@ -92,9 +62,8 @@ namespace BackupWarden.ViewModels
 
         private readonly ILogger<MainViewModel> _logger;
 
-        private readonly Progress<int> _backupProgressReporter;
+        private readonly Progress<int> _progressReporter;
         private readonly ContextCallback<AppConfig, SyncStatus> _syncStatusDispatcher;
-        private readonly Progress<int> _restoreProgressReporter;
 
 
         public IAsyncRelayCommand AddYamlFileCommand { get; }
@@ -119,8 +88,7 @@ namespace BackupWarden.ViewModels
             _dialogService = dialogService;
             _logger = logger;
 
-            _backupProgressReporter = new Progress<int>(percent => BackupProgress = percent);
-            _restoreProgressReporter = new Progress<int>(percent => RestoreProgress = percent);
+            _progressReporter = new Progress<int>(percent => Progress = percent);
             _syncStatusDispatcher = new ContextCallback<AppConfig, SyncStatus>((app, status) => app.SyncStatus = status);
 
             AddYamlFileCommand = new AsyncRelayCommand(AddYamlFileAsync, CanModifySettings);
@@ -176,7 +144,7 @@ namespace BackupWarden.ViewModels
                     BackupCommand.NotifyCanExecuteChanged();
                     RestoreCommand.NotifyCanExecuteChanged();
                 }
-                else if (e.PropertyName is nameof(IsBackingUp) or nameof(IsRestoring) or nameof(IsUpdatingSyncStatus))
+                else if (e.PropertyName is nameof(IsRunning))
                 {
                     BackupCommand.NotifyCanExecuteChanged();
                     RestoreCommand.NotifyCanExecuteChanged();
@@ -189,17 +157,17 @@ namespace BackupWarden.ViewModels
 
         private bool CanBackup()
         {
-            return !IsUpdatingSyncStatus && !IsBackingUp && !IsRestoring && SelectedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
+            return !IsRunning && SelectedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
         }
 
         private bool CanModifySettings()
         {
-            return !IsUpdatingSyncStatus && !IsBackingUp && !IsRestoring;
+            return !IsRunning;
         }
 
         private bool CanRestore()
         {
-            return !IsUpdatingSyncStatus && !IsBackingUp && !IsRestoring && SelectedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
+            return !IsRunning && SelectedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
         }
 
         private async Task CheckAppsSyncStatusAsync()
@@ -210,7 +178,7 @@ namespace BackupWarden.ViewModels
             }
             try
             {
-                IsUpdatingSyncStatus = true;
+                IsRunning = true;
                 UpdateSyncStatusToUnknown(LoadedApps);
                 await _backupSyncService.UpdateSyncStatusAsync(LoadedApps, DestinationFolder, _syncStatusDispatcher.Invoke);
             }
@@ -221,7 +189,7 @@ namespace BackupWarden.ViewModels
             }
             finally
             {
-                IsUpdatingSyncStatus = false;
+                IsRunning = false;
             }
         }
 
@@ -281,15 +249,15 @@ namespace BackupWarden.ViewModels
         private async Task BackupAsync()
         {
             _logger.LogWarning("Backup started.");
-            IsBackingUp = true;
-            BackupProgress = 0;
+            IsRunning = true;
+            Progress = 0;
             try
             {
                 UpdateSyncStatusToUnknown(SelectedApps);
                 await _backupSyncService.BackupAsync(
                     SelectedApps,
                     DestinationFolder!,
-                    _backupProgressReporter, _syncStatusDispatcher.Invoke);
+                    _progressReporter, _syncStatusDispatcher.Invoke);
             }
             catch (Exception ex)
             {
@@ -298,7 +266,7 @@ namespace BackupWarden.ViewModels
             }
             finally
             {
-                IsBackingUp = false;
+                IsRunning = false;
                 _logger.LogWarning("Backup finished.");
             }
         }
@@ -306,15 +274,15 @@ namespace BackupWarden.ViewModels
         private async Task RestoreAsync()
         {
             _logger.LogWarning("Restore started.");
-            IsRestoring = true;
-            RestoreProgress = 0;
+            IsRunning = true;
+            Progress = 0;
             try
             {
                 UpdateSyncStatusToUnknown(SelectedApps);
                 await _backupSyncService.RestoreAsync(
                     SelectedApps,
                     DestinationFolder!,
-                    _restoreProgressReporter, _syncStatusDispatcher.Invoke);
+                    _progressReporter, _syncStatusDispatcher.Invoke);
             }
             catch (Exception ex)
             {
@@ -323,7 +291,7 @@ namespace BackupWarden.ViewModels
             }
             finally
             {
-                IsRestoring = false;
+                IsRunning = false;
                 _logger.LogWarning("Restore finished.");
             }
         }
