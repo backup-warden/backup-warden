@@ -18,6 +18,7 @@ namespace BackupWarden.ViewModels
     {
         public ObservableCollection<string> YamlFilePaths { get; } = [];
         public ObservableCollection<AppConfig> LoadedApps { get; } = [];
+        public int SelectedAppsCount => SelectedApps.Count;
         public ObservableCollection<AppConfig> SelectedApps { get; set; } = [];
 
 
@@ -165,6 +166,7 @@ namespace BackupWarden.ViewModels
             {
                 BackupCommand.NotifyCanExecuteChanged();
                 RestoreCommand.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(SelectedAppsCount));
             };
 
             PropertyChanged += (s, e) =>

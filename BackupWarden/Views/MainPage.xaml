@@ -112,12 +112,20 @@
                 Value="{x:Bind ViewModel.RestoreProgress, Mode=OneWay}" />
         </StackPanel>
 
-        <TextBlock
+        <StackPanel
             Grid.Row="3"
             Margin="0,16,0,0"
-            FontWeight="SemiBold"
-            Text="Available Backup Apps" />
-        <!--  App list fills remaining space and scrolls  -->
+            Orientation="Horizontal"
+            Spacing="12">
+            <TextBlock FontWeight="SemiBold" Text="Backup Apps" />
+            <Rectangle
+                Width="1"
+                Height="20"
+                VerticalAlignment="Center"
+                Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+            <TextBlock FontWeight="Normal" Text="Selected:" />
+            <TextBlock FontWeight="Bold" Text="{x:Bind ViewModel.SelectedAppsCount, Mode=OneWay}" />
+        </StackPanel>
         <ScrollViewer
             Grid.Row="4"
             Margin="0,8,0,0"
