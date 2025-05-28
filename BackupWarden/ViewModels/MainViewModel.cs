@@ -161,13 +161,9 @@ namespace BackupWarden.ViewModels
 
         private void MonitorPropertyChanged()
         {
-            LoadedApps.CollectionChanged += (s, e) =>
-            {
-                BackupCommand.NotifyCanExecuteChanged();
-            };
-
             SelectedApps.CollectionChanged += (s, e) =>
             {
+                BackupCommand.NotifyCanExecuteChanged();
                 RestoreCommand.NotifyCanExecuteChanged();
             };
 
@@ -191,7 +187,7 @@ namespace BackupWarden.ViewModels
 
         private bool CanBackup()
         {
-            return !IsUpdatingSyncStatus && !IsBackingUp && !IsRestoring && LoadedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
+            return !IsUpdatingSyncStatus && !IsBackingUp && !IsRestoring && SelectedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
         }
 
         private bool CanModifySettings()
@@ -282,26 +278,26 @@ namespace BackupWarden.ViewModels
 
         private async Task BackupAsync()
         {
-            _logger.LogWarning("Sync started.");
+            _logger.LogWarning("Backup started.");
             IsBackingUp = true;
             BackupProgress = 0;
             try
             {
-                UpdateSyncStatusToUnknown(LoadedApps);
+                UpdateSyncStatusToUnknown(SelectedApps);
                 await _backupSyncService.BackupAsync(
-                    LoadedApps,
+                    SelectedApps,
                     DestinationFolder!,
                     _backupProgressReporter, _syncStatusDispatcher.Invoke);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occurred during sync.");
-                await _dialogService.ShowErrorAsync("An error occurred during synchronization. Please check the logs for details.");
+                _logger.LogError(ex, "An error occurred during backup.");
+                await _dialogService.ShowErrorAsync("An error occurred during backup. Please check the logs for details.");
             }
             finally
             {
                 IsBackingUp = false;
-                _logger.LogWarning("Sync finished.");
+                _logger.LogWarning("Backup finished.");
             }
         }
 

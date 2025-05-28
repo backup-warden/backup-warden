@@ -20,7 +20,6 @@ namespace BackupWarden
             InitializeComponent();
             ExtendsContentIntoTitleBar = true;
 
-            AppWindow.Resize(new SizeInt32(1920, 1080));
             CenterWindow();
         }
         private void CenterWindow()
