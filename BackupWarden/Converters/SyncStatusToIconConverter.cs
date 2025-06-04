@@ -17,8 +17,7 @@ namespace BackupWarden.Converters
                     SyncStatus.OutOfSync => "\uEA6A",   // Cancel
                     SyncStatus.Syncing => "\uE895",     // Sync
                     SyncStatus.Failed => "\uEA39",      // Error
-                    SyncStatus.SourcePathProblem => "\uE7BA", // Warning
-                    SyncStatus.BackupPathProblem => "\uE7BA", // Warning
+                    SyncStatus.Warning => "\uE7BA", // Warning
                     _ => "\uE9CE",                      // Help/Unknown
                 };
             }

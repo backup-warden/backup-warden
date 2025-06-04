@@ -130,6 +130,9 @@
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="models:AppConfig">
                         <StackPanel Orientation="Horizontal" Spacing="8">
+                            <ToolTipService.ToolTip>
+                                <ToolTip Content="{x:Bind LastSyncReport, Mode=OneWay}" />
+                            </ToolTipService.ToolTip>
                             <FontIcon
                                 Margin="0,0,4,0"
                                 FontSize="18"

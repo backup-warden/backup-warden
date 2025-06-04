@@ -63,7 +63,7 @@ namespace BackupWarden.ViewModels
         private readonly ILogger<MainViewModel> _logger;
 
         private readonly Progress<int> _progressReporter;
-        private readonly ContextCallback<AppConfig, SyncStatus> _syncStatusDispatcher;
+        private readonly ContextCallback<AppConfig, AppSyncReport> _syncStatusDispatcher;
 
 
         public IAsyncRelayCommand AddYamlFileCommand { get; }
@@ -89,7 +89,10 @@ namespace BackupWarden.ViewModels
             _logger = logger;
 
             _progressReporter = new Progress<int>(percent => Progress = percent);
-            _syncStatusDispatcher = new ContextCallback<AppConfig, SyncStatus>((app, status) => app.SyncStatus = status);
+            _syncStatusDispatcher = new ContextCallback<AppConfig, AppSyncReport>((app, status) => {
+                app.SyncStatus = status.OverallStatus;
+                app.LastSyncReport = status;
+            } );
 
             AddYamlFileCommand = new AsyncRelayCommand(AddYamlFileAsync, CanModifySettings);
             RemoveYamlFileCommand = new RelayCommand<string?>(RemoveYamlFile, (_) => CanModifySettings());
