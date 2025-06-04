@@ -36,6 +36,57 @@ namespace BackupWarden.Utils
             return path;
         }
 
+        public static string ConvertToSpecialFolderPath(string fullPath)
+        {
+            if (string.IsNullOrEmpty(fullPath))
+            {
+                return fullPath;
+            }
+
+            // Normalize path for comparison
+            fullPath = Path.GetFullPath(fullPath);
+
+            // Try to match the path with any of the special folders
+            var matchedEntries = FolderResolvers
+                .Select(kvp =>
+                {
+                    var specialPath = kvp.Value();
+                    return new
+                    {
+                        Placeholder = kvp.Key,
+                        Path = specialPath,
+                        PathLength = specialPath.Length,
+                        SeparatorCount = specialPath.Count(c => c == Path.DirectorySeparatorChar || c == Path.AltDirectorySeparatorChar)
+                    };
+                })
+                .Where(entry => !string.IsNullOrEmpty(entry.Path) && fullPath.StartsWith(entry.Path, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(entry => entry.PathLength) // Primary sort: longest path first
+                .ThenByDescending(entry => entry.SeparatorCount) // Secondary sort: most separators first
+                .ToList();
+
+            if (matchedEntries.Count > 0)
+            {
+                var bestMatch = matchedEntries.First();
+                var relativePath = fullPath[bestMatch.PathLength..];
+
+                // Ensure we have a path separator at the beginning of the relative path if needed
+                if (relativePath.Length > 0 && relativePath[0] != Path.DirectorySeparatorChar && relativePath[0] != Path.AltDirectorySeparatorChar)
+                {
+                    relativePath = Path.DirectorySeparatorChar + relativePath;
+                }
+                // Normalize to use Path.DirectorySeparatorChar for the appended part
+                else if (relativePath.Length > 0 && relativePath[0] == Path.AltDirectorySeparatorChar)
+                {
+                    relativePath = Path.DirectorySeparatorChar + relativePath[1..];
+                }
+
+
+                return bestMatch.Placeholder + relativePath;
+            }
+
+            return fullPath;
+        }
+
         /// <summary>
         /// Maps a backup path containing a user profile segment (e.g., C/Users/olduser/...)
         /// to the current user's profile path.

@@ -57,7 +57,7 @@ namespace BackupWarden.Services.Business
                                 {
                                     foreach (var file in Directory.EnumerateFiles(dirPath, "*", SearchOption.AllDirectories))
                                     {
-                                        var relative = GetDriveLetterRelativePath(file);
+                                        var relative = GetSpecialFolderRelativePath(file);
                                         var destFile = Path.Combine(appDest, relative);
                                         if (!File.Exists(destFile))
                                         {
@@ -77,7 +77,7 @@ namespace BackupWarden.Services.Business
                             }
                             else if (File.Exists(expandedSource))
                             {
-                                var relative = GetDriveLetterRelativePath(expandedSource);
+                                var relative = GetSpecialFolderRelativePath(expandedSource);
                                 var destFile = Path.Combine(appDest, relative);
                                 if (!File.Exists(destFile))
                                 {
@@ -203,7 +203,7 @@ namespace BackupWarden.Services.Business
         {
             foreach (var file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
             {
-                var relative = GetDriveLetterRelativePath(file);
+                var relative = GetSpecialFolderRelativePath(file);
                 var destFile = Path.Combine(destinationRoot, relative);
                 await BackupFileInternalAsync(file, destFile, sourceFiles);
             }
@@ -211,7 +211,7 @@ namespace BackupWarden.Services.Business
 
         private static async Task BackupFileAsync(string sourceFile, string destinationRoot, HashSet<string> sourceFiles)
         {
-            var relative = GetDriveLetterRelativePath(sourceFile);
+            var relative = GetSpecialFolderRelativePath(sourceFile);
             var destFile = Path.Combine(destinationRoot, relative);
             await BackupFileInternalAsync(sourceFile, destFile, sourceFiles);
         }
@@ -234,10 +234,10 @@ namespace BackupWarden.Services.Business
         }
 
         public async Task RestoreAsync(
-    IEnumerable<AppConfig> configs,
-    string destinationRoot,
-    IProgress<int>? progress = null,
-    Action<AppConfig, SyncStatus>? perAppStatusCallback = null)
+IEnumerable<AppConfig> configs,
+string destinationRoot,
+IProgress<int>? progress = null,
+Action<AppConfig, SyncStatus>? perAppStatusCallback = null)
         {
             await Task.Run(async () =>
             {
@@ -294,27 +294,15 @@ namespace BackupWarden.Services.Business
                     {
                         foreach (var backupFile in files)
                         {
-                            // Get the relative path inside the backup (e.g., C/Users/olduser/Documents/file.txt)
-                            var relativePath = Path.GetRelativePath(appBackupRoot, backupFile);
+                            var relativePathFromBackup = Path.GetRelativePath(appBackupRoot, backupFile);
 
-                            // Map the relative path to the current user's profile if it matches a user profile pattern
-                            var restorePath = SpecialFolderUtil.MapBackupUserPathToCurrentUser(relativePath);
+                            var pathAfterUserMapping = SpecialFolderUtil.MapBackupUserPathToCurrentUser(relativePathFromBackup);
 
-                            // Ensure the drive letter is rooted (e.g., C\Users\currentuser\Documents\file.txt)
-                            string destFile;
-                            if (Path.IsPathRooted(restorePath))
-                            {
-                                destFile = restorePath;
-                            }
-                            else
-                            {
-                                // Assume Windows drive letter at the start (e.g., C\...)
-                                var driveLetter = restorePath.Length > 1 && restorePath[1] == Path.DirectorySeparatorChar
-                                    ? $"{restorePath[0]}:{restorePath[1..]}"
-                                    : restorePath;
-                                destFile = driveLetter;
-                            }
-                            destFile = Path.GetFullPath(destFile);
+                            
+                            var expandedFinalPathCandidate = SpecialFolderUtil.ExpandSpecialFolders(pathAfterUserMapping);
+
+                            
+                            string destFile = Path.GetFullPath(expandedFinalPathCandidate);
 
                             // Only restore if destFile is under one of the mapped paths
                             bool shouldRestore = mappedPaths.Any(mp =>
@@ -370,6 +358,20 @@ namespace BackupWarden.Services.Business
             var driveLetter = root[0].ToString();
             var rest = fullPath[root.Length..];
             return Path.Combine(driveLetter, rest);
+        }
+
+        private static string GetSpecialFolderRelativePath(string fullPath)
+        {
+            // First try to convert to special folder path
+            var specialPath = SpecialFolderUtil.ConvertToSpecialFolderPath(fullPath);
+
+            // If the conversion didn't result in a special folder path, fall back to drive letter path
+            if (specialPath == fullPath && Path.IsPathRooted(fullPath))
+            {
+                return GetDriveLetterRelativePath(fullPath);
+            }
+
+            return specialPath;
         }
 
         private static async Task CopyFileAsync(string sourceFile, string destFile)

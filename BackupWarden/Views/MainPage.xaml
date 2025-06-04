@@ -126,7 +126,7 @@
                 ItemsSource="{x:Bind ViewModel.LoadedApps, Mode=OneWay}"
                 SelectedItem="{x:Bind ViewModel.SelectedApps, Mode=OneWay}"
                 SelectionChanged="ListView_SelectionChanged"
-                SelectionMode="Extended">
+                SelectionMode="Multiple">
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="models:AppConfig">
                         <StackPanel Orientation="Horizontal" Spacing="8">
