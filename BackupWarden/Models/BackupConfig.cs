@@ -7,13 +7,21 @@ using System.Threading.Tasks;
 
 namespace BackupWarden.Models
 {
+    public enum SyncMode
+    {
+        Copy, // Files from the source are copied to the destination. If files with the same names are present on the destination, they are overwritten.
+        Sync  // Files on the destination are changed to match those on the source. If a file does not exist on the source, it is also deleted from the destination.
+    }
+
     public enum SyncStatus
     {
-        Unknown,
-        InSync,
-        OutOfSync,
-        Syncing,
-        Failed
+        Unknown,            // Initial state or error determining status
+        InSync,             // Backup accurately reflects the source application paths.
+        OutOfSync,          // Backup does not accurately reflect the source application paths (e.g., source has newer/different files, or backup has files not in source).
+        Syncing,            // A backup or restore operation is in progress.
+        Failed,             // The last operation failed.
+        SourcePathProblem,  // One or more source application paths are empty, inaccessible, or invalid. This can also mean all paths are valid but collectively contain no files.
+        BackupPathProblem   // The backup destination for this app is empty (when not expected), inaccessible, or invalid.
     }
 
     public class BackupConfig

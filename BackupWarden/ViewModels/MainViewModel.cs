@@ -256,7 +256,7 @@ namespace BackupWarden.ViewModels
                 UpdateSyncStatusToUnknown(SelectedApps);
                 await _backupSyncService.BackupAsync(
                     SelectedApps,
-                    DestinationFolder!,
+                    DestinationFolder!,SyncMode.Copy,
                     _progressReporter, _syncStatusDispatcher.Invoke);
             }
             catch (Exception ex)
@@ -281,7 +281,7 @@ namespace BackupWarden.ViewModels
                 UpdateSyncStatusToUnknown(SelectedApps);
                 await _backupSyncService.RestoreAsync(
                     SelectedApps,
-                    DestinationFolder!,
+                    DestinationFolder!, SyncMode.Copy,
                     _progressReporter, _syncStatusDispatcher.Invoke);
             }
             catch (Exception ex)
