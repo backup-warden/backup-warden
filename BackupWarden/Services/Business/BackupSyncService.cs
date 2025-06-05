@@ -162,16 +162,8 @@ namespace BackupWarden.Services.Business
             }
             else if (anyValidPathSpecEncountered && !issues.Any(i => i.IssueType == PathIssueType.PathIsEffectivelyEmpty))
             {
-                // If we had valid path specs, but no files were found, and no "PathIsEffectivelyEmpty" issue was logged for a directory,
-                // it implies all valid specs were for individual files that might have had issues (NotFound, Inaccessible).
-                // In this specific sub-case, if there are no files, it's empty.
-                // However, the PathIsEffectivelyEmpty for directories already covers the main scenario.
-                // This primarily ensures that if all pathSpecs point to non-existent/inaccessible *files*, it's still empty.
                 isEffectivelyEmptyOverall = true;
             }
-            // If !anyValidPathSpecEncountered, it means all pathSpecs were bad (null/unexpandable), so it's effectively empty.
-            // isEffectivelyEmptyOverall is initialized to true, so this holds.
-
             return (fileDetails, issues, isEffectivelyEmptyOverall);
         }
 
@@ -203,11 +195,10 @@ namespace BackupWarden.Services.Business
                             issue.PathSpec, issue.ExpandedPath, issue.IssueType, $"Backup location: {issue.Description}"
                         )));
 
-                        // Perform comparison only if there are no critical issues that prevent comparison
                         bool canCompare = !report.PathIssues.Any(pi =>
                                             pi.IssueType == PathIssueType.PathSpecNullOrEmpty ||
                                             pi.IssueType == PathIssueType.PathUnexpandable ||
-                                            (pi.IssueType == PathIssueType.PathInaccessible && pi.PathSpec == "N/A") // Global issue
+                                            (pi.IssueType == PathIssueType.PathInaccessible && pi.PathSpec == "N/A")
                                          );
 
                         if (canCompare)
@@ -277,6 +268,7 @@ namespace BackupWarden.Services.Business
                     perAppStatusCallback?.Invoke(app, report);
 
                     var appDest = Path.Combine(destinationRoot, app.Id);
+                    bool skipSyncDeletionDueToEmptySource = false;
 
                     try
                     {
@@ -287,7 +279,7 @@ namespace BackupWarden.Services.Business
                         bool criticalSourceIssue = sourcePathIssues.Any(pi =>
                             pi.IssueType == PathIssueType.PathSpecNullOrEmpty ||
                             pi.IssueType == PathIssueType.PathUnexpandable ||
-                            pi.IssueType == PathIssueType.PathInaccessible); // Inaccessible source is critical for backup
+                            pi.IssueType == PathIssueType.PathInaccessible);
 
                         if (criticalSourceIssue)
                         {
@@ -316,15 +308,18 @@ namespace BackupWarden.Services.Business
 
                         if (sourceIsEffectivelyEmpty && !sourceFiles.Any())
                         {
-                            // This is now primarily a warning, logged in GetPathContents if a dir is empty.
-                            // The main check here is if there are *any* files to process.
                             _logger.LogInformation("Source for app {AppId} is effectively empty or all specified source files have issues.", app.Id);
                             if (mode == SyncMode.Sync)
                             {
                                 string msg = $"SYNC mode: Source for app {app.Id} is empty. Destination at {appDest} will NOT be cleared.";
                                 _logger.LogWarning(msg);
                                 report.PathIssues.Add(new PathIssue(appDest, appDest, PathIssueType.OperationPrevented, msg));
+                                skipSyncDeletionDueToEmptySource = true;
                             }
+                            // If not Sync, or if Sync but source is empty (and we skip deletion), report and continue.
+                            // The main copy loop `foreach (var (relativePath, srcFileInfo) in sourceFiles)` will not run.
+                            // The Sync deletion block will be skipped if skipSyncDeletionDueToEmptySource is true.
+                            // So, just determine status and continue.
                             report.DetermineOverallStatus();
                             perAppStatusCallback?.Invoke(app, report);
                             processedApps++;
@@ -336,11 +331,19 @@ namespace BackupWarden.Services.Business
                         foreach (var (relativePath, srcFileInfo) in sourceFiles)
                         {
                             var destFile = Path.Combine(appDest, relativePath);
-                            try { Directory.CreateDirectory(Path.GetDirectoryName(destFile)!); }
+                            try
+                            {
+                                var destDir = Path.GetDirectoryName(destFile);
+                                if (destDir != null && !Directory.Exists(destDir))
+                                {
+                                    Directory.CreateDirectory(destDir);
+                                }
+                            }
                             catch (Exception ex)
                             {
                                 report.PathIssues.Add(new PathIssue(Path.GetDirectoryName(destFile), Path.GetDirectoryName(destFile), PathIssueType.PathInaccessible, $"Cannot create directory for {destFile}: {ex.Message}"));
                                 _logger.LogError(ex, "Cannot create directory for {DestFile} in app {AppId}", destFile, app.Id);
+                                report.FileDifferences.Add(new FileDifference(relativePath, FileDifferenceType.OperationFailed, $"Failed to create directory for destination file: {ex.Message}", srcFileInfo, null));
                                 continue;
                             }
 
@@ -363,34 +366,49 @@ namespace BackupWarden.Services.Business
                             }
                             if (!report.FileDifferences.Any(fd => fd.RelativePath == relativePath && fd.DifferenceType == FileDifferenceType.OperationFailed))
                             {
-                                backedUpRelativePaths.Add(relativePath); // Only add if copy didn't fail
+                                backedUpRelativePaths.Add(relativePath);
                             }
                         }
 
-                        if (mode == SyncMode.Sync)
+                        if (mode == SyncMode.Sync && !skipSyncDeletionDueToEmptySource)
                         {
                             var (destFilesForSync, destPathIssuesForSync, _) = GetPathContents(new[] { appDest + Path.DirectorySeparatorChar }, filePath => Path.GetRelativePath(appDest, filePath), appDest);
                             report.PathIssues.AddRange(destPathIssuesForSync.Select(issue => new PathIssue(issue.PathSpec, issue.ExpandedPath, issue.IssueType, $"SYNC Deletion Check (Backup Dest): {issue.Description}")));
 
-                            foreach (var (relativeDestPath, destFileInfoForSync) in destFilesForSync)
+                            bool criticalDestPathIssueForSync = destPathIssuesForSync.Any(pi =>
+                                pi.IssueType == PathIssueType.PathSpecNullOrEmpty ||
+                                pi.IssueType == PathIssueType.PathUnexpandable ||
+                                pi.IssueType == PathIssueType.PathInaccessible);
+
+                            if (criticalDestPathIssueForSync)
                             {
-                                if (!backedUpRelativePaths.Contains(relativeDestPath))
+                                _logger.LogWarning("SYNC Backup: Critical issue reading backup destination paths for app {AppId}. Cannot perform deletions from backup.", app.Id);
+                                report.PathIssues.Add(new PathIssue(appDest, appDest, PathIssueType.OperationPrevented, "SYNC Backup: Deletion step skipped due to critical issues accessing backup destination paths."));
+                            }
+                            else
+                            {
+                                foreach (var (relativeDestPath, destFileInfoForSync) in destFilesForSync)
                                 {
-                                    try
+                                    if (!backedUpRelativePaths.Contains(relativeDestPath))
                                     {
-                                        _logger.LogInformation("SYNC Backup: Deleting {DestFileFullPath} as it's not in the source for app {AppId}", destFileInfoForSync.FullName, app.Id);
-                                        await _retryPolicy.ExecuteAsync(() => Task.Run(() => File.Delete(destFileInfoForSync.FullName)));
-                                        // Optionally report this deletion as a "difference" or an "action"
-                                        // report.FileDifferences.Add(new FileDifference(relativeDestPath, FileDifferenceType.DestinationOnly, "Deleted from destination (SYNC mode).", null, destFileInfoForSync));
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        _logger.LogError(ex, "Error deleting file {DestFileFullPath} during SYNC backup for app {AppId}", destFileInfoForSync.FullName, app.Id);
-                                        report.FileDifferences.Add(new FileDifference(relativeDestPath, FileDifferenceType.OperationFailed, $"Failed to delete from destination (SYNC mode): {ex.Message}", null, destFileInfoForSync));
+                                        try
+                                        {
+                                            _logger.LogInformation("SYNC Backup: Deleting {DestFileFullPath} as it's not in the source for app {AppId}", destFileInfoForSync.FullName, app.Id);
+                                            await _retryPolicy.ExecuteAsync(() => Task.Run(() => File.Delete(destFileInfoForSync.FullName)));
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            _logger.LogError(ex, "Error deleting file {DestFileFullPath} during SYNC backup for app {AppId}", destFileInfoForSync.FullName, app.Id);
+                                            report.FileDifferences.Add(new FileDifference(relativeDestPath, FileDifferenceType.OperationFailed, $"Failed to delete from destination (SYNC mode): {ex.Message}", null, destFileInfoForSync));
+                                        }
                                     }
                                 }
+                                DeleteEmptyDirectories(appDest);
                             }
-                            DeleteEmptyDirectories(appDest);
+                        }
+                        else if (mode == SyncMode.Sync && skipSyncDeletionDueToEmptySource)
+                        {
+                            _logger.LogInformation("SYNC Backup: Deletion from backup destination for app {AppId} was skipped because source was empty.", app.Id);
                         }
                         report.DetermineOverallStatus();
                     }
@@ -409,7 +427,6 @@ namespace BackupWarden.Services.Business
                 }
             });
         }
-
 
         public async Task RestoreAsync(
             IEnumerable<AppConfig> configs,
@@ -432,65 +449,29 @@ namespace BackupWarden.Services.Business
                     var report = new AppSyncReport { OverallStatus = SyncStatus.Syncing };
                     perAppStatusCallback?.Invoke(app, report);
 
-                    var appBackupSourceRoot = Path.Combine(destinationRoot, app.Id);
+                    // Source for restore is the backup location for this app
+                    var backupSourcePathForApp = Path.Combine(destinationRoot, app.Id);
+                    bool skipSyncDeletionDueToEmptySource = false;
 
                     try
                     {
-                        // Validate AppConfig.Paths (live destination paths for restore)
-                        var (livePathTargets, livePathIssues, _) = GetPathContents(app.Paths, GetSpecialFolderRelativePath);
-                        report.PathIssues.AddRange(livePathIssues.Select(issue => new PathIssue(issue.PathSpec, issue.ExpandedPath, issue.IssueType, $"Live Target Path: {issue.Description}")));
+                        // 1. Get files from the backup location (these are the "source" for restore)
+                        var (backupFiles, backupPathIssues, backupIsEffectivelyEmpty) =
+                            GetPathContents(new[] { backupSourcePathForApp + Path.DirectorySeparatorChar },
+                                            filePath => Path.GetRelativePath(backupSourcePathForApp, filePath),
+                                            backupSourcePathForApp);
+                        report.PathIssues.AddRange(backupPathIssues.Select(pi =>
+                            new PathIssue(pi.PathSpec, pi.ExpandedPath, pi.IssueType, $"Restore Source (Backup Location): {pi.Description}")));
 
-                        bool criticalLivePathIssue = livePathIssues.Any(pi =>
+                        bool criticalBackupSourceIssue = backupPathIssues.Any(pi =>
                             pi.IssueType == PathIssueType.PathSpecNullOrEmpty ||
                             pi.IssueType == PathIssueType.PathUnexpandable ||
-                            pi.IssueType == PathIssueType.PathInaccessible);
-
-                        if (criticalLivePathIssue || !app.Paths.Any())
-                        {
-                            _logger.LogWarning("Critical issue with configured live target paths for app {AppId}, or no paths configured. Restore cannot proceed.", app.Id);
-                            if (!app.Paths.Any()) report.PathIssues.Add(new PathIssue("AppConfig.Paths", null, PathIssueType.PathSpecNullOrEmpty, "No live target paths configured for restore."));
-                            report.DetermineOverallStatus();
-                            perAppStatusCallback?.Invoke(app, report);
-                            processedApps++;
-                            progress?.Report((int)(processedApps / (double)totalApps * 100));
-                            continue;
-                        }
-
-                        // Expanded live target paths for validation during restore
-                        var expandedAppTargetBasePaths = app.Paths
-                            .Select(p =>
-                            {
-                                var expanded = SpecialFolderUtil.ExpandSpecialFolders(p);
-                                if (string.IsNullOrWhiteSpace(expanded)) return (ExpandedPathInfo?)null;
-                                bool isDir = expanded.EndsWith(Path.DirectorySeparatorChar.ToString()) || expanded.EndsWith(Path.AltDirectorySeparatorChar.ToString());
-                                return new ExpandedPathInfo(p, Path.GetFullPath(isDir ? expanded.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) : expanded), isDir);
-                            })
-                            .Where(p => p != null && !string.IsNullOrWhiteSpace(p.Value.Expanded))
-                            .Select(p => p!.Value)
-                            .ToList();
-                        if (!expandedAppTargetBasePaths.Any()) // Should be caught by criticalLivePathIssue if paths were bad
-                        {
-                            _logger.LogWarning("No valid live target paths could be determined for app {AppId} after expansion. Restore cannot proceed.", app.Id);
-                            report.PathIssues.Add(new PathIssue("AppConfig.Paths", string.Join(";", app.Paths), PathIssueType.PathUnexpandable, "All configured live target paths are invalid or unexpandable."));
-                            report.DetermineOverallStatus();
-                            perAppStatusCallback?.Invoke(app, report);
-                            processedApps++;
-                            progress?.Report((int)(processedApps / (double)totalApps * 100));
-                            continue;
-                        }
-
-
-                        // Get files from backup source
-                        var (backupFiles, backupPathIssues, backupIsEffectivelyEmpty) =
-                            GetPathContents(new[] { appBackupSourceRoot + Path.DirectorySeparatorChar },
-                                filePath => Path.GetRelativePath(appBackupSourceRoot, filePath), appBackupSourceRoot);
-                        report.PathIssues.AddRange(backupPathIssues.Select(issue => new PathIssue(issue.PathSpec, issue.ExpandedPath, issue.IssueType, $"Backup Source: {issue.Description}")));
-
-                        bool criticalBackupSourceIssue = backupPathIssues.Any(pi => pi.IssueType == PathIssueType.PathInaccessible); // Inaccessible backup source is critical
+                            pi.IssueType == PathIssueType.PathNotFound || // Backup for app ID not found
+                            pi.IssueType == PathIssueType.PathInaccessible); // Backup for app ID inaccessible
 
                         if (criticalBackupSourceIssue)
                         {
-                            _logger.LogWarning("Critical issue reading backup source for app {AppId}. Restore cannot proceed.", app.Id);
+                            _logger.LogWarning("Critical problem with backup source for app {AppId} at {BackupPath}. Restore cannot proceed.", app.Id, backupSourcePathForApp);
                             report.DetermineOverallStatus();
                             perAppStatusCallback?.Invoke(app, report);
                             processedApps++;
@@ -500,101 +481,140 @@ namespace BackupWarden.Services.Business
 
                         if (backupIsEffectivelyEmpty && !backupFiles.Any())
                         {
-                            _logger.LogInformation("Backup source for app {AppId} is effectively empty.", app.Id);
-                            report.PathIssues.Add(new PathIssue(appBackupSourceRoot, appBackupSourceRoot, PathIssueType.PathIsEffectivelyEmpty, "Backup source is empty or contains no files."));
+                            _logger.LogInformation("Backup source for app {AppId} is effectively empty. Nothing to restore.", app.Id);
                             if (mode == SyncMode.Sync)
                             {
-                                string msg = $"SYNC mode: Backup source for app {app.Id} is empty. Live application paths will NOT be cleared.";
+                                string appPathsSummary = app.Paths.Count > 0 ? string.Join(", ", app.Paths.Take(2)) + (app.Paths.Count > 2 ? "..." : "") : "N/A";
+                                string msg = $"SYNC mode: Backup source for app {app.Id} is empty. Original application files at '{appPathsSummary}' will NOT be cleared, mirroring backup behavior.";
                                 _logger.LogWarning(msg);
-                                report.PathIssues.Add(new PathIssue("Live Paths", string.Join(";", app.Paths), PathIssueType.OperationPrevented, msg));
-                            }
-                            report.DetermineOverallStatus();
-                            perAppStatusCallback?.Invoke(app, report);
-                            processedApps++;
-                            progress?.Report((int)(processedApps / (double)totalApps * 100));
-                            continue;
-                        }
-
-                        var restoredLiveFileFullPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        foreach (var (relativePathFromBackupAppRoot, backupFileInfo) in backupFiles)
-                        {
-                            var pathAfterUserMapping = SpecialFolderUtil.MapBackupUserPathToCurrentUser(relativePathFromBackupAppRoot);
-                            var finalLivePathCandidate = SpecialFolderUtil.ExpandSpecialFolders(pathAfterUserMapping);
-
-                            if (string.IsNullOrWhiteSpace(finalLivePathCandidate))
-                            {
-                                report.PathIssues.Add(new PathIssue(relativePathFromBackupAppRoot, null, PathIssueType.PathUnexpandable, $"Could not determine live path for backup item '{relativePathFromBackupAppRoot}'."));
-                                continue;
-                            }
-                            var finalLiveFullPath = Path.GetFullPath(finalLivePathCandidate);
-
-                            bool isInConfiguredPath = expandedAppTargetBasePaths.Any(etp =>
-                                etp.IsDir
-                                    ? finalLiveFullPath.StartsWith(etp.Expanded + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || finalLiveFullPath.Equals(etp.Expanded, StringComparison.OrdinalIgnoreCase)
-                                    : finalLiveFullPath.Equals(etp.Expanded, StringComparison.OrdinalIgnoreCase));
-
-                            if (!isInConfiguredPath)
-                            {
-                                _logger.LogDebug("Skipping restore of backup file {RelativePath} to {FinalLiveFullPath} as it's not under a configured target path for app {AppId}", relativePathFromBackupAppRoot, finalLiveFullPath, app.Id);
-                                report.PathIssues.Add(new PathIssue(finalLiveFullPath, finalLiveFullPath, PathIssueType.OperationPrevented, $"File '{relativePathFromBackupAppRoot}' maps to '{finalLiveFullPath}', which is outside configured live restore paths. Skipped."));
-                                continue;
-                            }
-
-                            try { Directory.CreateDirectory(Path.GetDirectoryName(finalLiveFullPath)!); }
-                            catch (Exception ex)
-                            {
-                                report.PathIssues.Add(new PathIssue(Path.GetDirectoryName(finalLiveFullPath), Path.GetDirectoryName(finalLiveFullPath), PathIssueType.PathInaccessible, $"Cannot create live directory for {finalLiveFullPath}: {ex.Message}"));
-                                _logger.LogError(ex, "Cannot create live directory for {FinalLiveFullPath} in app {AppId}", finalLiveFullPath, app.Id);
-                                continue;
-                            }
-
-                            try
-                            {
-                                await RestoreFileInternalAsync(backupFileInfo.FullName, finalLiveFullPath);
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError(ex, "Error restoring file {BackupFile} to {LiveFile} for app {AppId}", backupFileInfo.FullName, finalLiveFullPath, app.Id);
-                                report.FileDifferences.Add(new FileDifference(relativePathFromBackupAppRoot, FileDifferenceType.OperationFailed, $"Failed to restore to live path: {ex.Message}", backupFileInfo));
-                            }
-                            if (!report.FileDifferences.Any(fd => fd.RelativePath == relativePathFromBackupAppRoot && fd.DifferenceType == FileDifferenceType.OperationFailed))
-                            {
-                                restoredLiveFileFullPaths.Add(finalLiveFullPath);
+                                report.PathIssues.Add(new PathIssue(appPathsSummary, null, PathIssueType.OperationPrevented, msg));
+                                skipSyncDeletionDueToEmptySource = true;
                             }
                         }
 
-                        if (mode == SyncMode.Sync)
+                        var restoredRelativePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        if (backupFiles.Any())
                         {
-                            foreach (var targetPathInfo in expandedAppTargetBasePaths)
+                            foreach (var (relativePath, backupFileInfo) in backupFiles)
                             {
-                                string currentLivePathTarget = targetPathInfo.Expanded;
-                                if (!Directory.Exists(currentLivePathTarget) && !File.Exists(currentLivePathTarget)) continue; // Nothing to delete if target doesn't exist
-
-                                var (liveFilesToCheck, livePathIssuesForSync, _) = GetPathContents(
-                                    new[] { targetPathInfo.IsDir ? currentLivePathTarget + Path.DirectorySeparatorChar : currentLivePathTarget },
-                                    filePath => Path.GetFullPath(filePath),
-                                    targetPathInfo.IsDir ? currentLivePathTarget : Path.GetDirectoryName(currentLivePathTarget)
-                                );
-                                report.PathIssues.AddRange(livePathIssuesForSync.Select(issue => new PathIssue(issue.PathSpec, issue.ExpandedPath, issue.IssueType, $"SYNC Deletion Check (Live Path): {issue.Description}")));
-
-                                foreach (var (liveFileFullPath, liveFileInfo) in liveFilesToCheck)
+                                string? restoreDestFullPath = null;
+                                try
                                 {
-                                    if (!restoredLiveFileFullPaths.Contains(liveFileFullPath))
+                                    restoreDestFullPath = SpecialFolderUtil.ExpandSpecialFolders(relativePath);
+                                    if (string.IsNullOrWhiteSpace(restoreDestFullPath))
                                     {
-                                        try
+                                        string errMsg = $"Could not expand restore destination path for relative path '{relativePath}'.";
+                                        _logger.LogWarning(errMsg);
+                                        report.PathIssues.Add(new PathIssue(relativePath, null, PathIssueType.PathUnexpandable, errMsg));
+                                        report.FileDifferences.Add(new FileDifference(relativePath, FileDifferenceType.OperationFailed, errMsg, backupFileInfo, null));
+                                        continue;
+                                    }
+
+                                    var destDir = Path.GetDirectoryName(restoreDestFullPath);
+                                    if (destDir != null && !Directory.Exists(destDir))
+                                    {
+                                        Directory.CreateDirectory(destDir);
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    string errMsg = $"Failed to prepare destination directory for '{restoreDestFullPath ?? relativePath}': {ex.Message}";
+                                    _logger.LogError(ex, "Error preparing destination for app {AppId}, relative path {RelativePath}", app.Id, relativePath);
+                                    report.PathIssues.Add(new PathIssue(relativePath, restoreDestFullPath, PathIssueType.PathInaccessible, errMsg));
+                                    report.FileDifferences.Add(new FileDifference(relativePath, FileDifferenceType.OperationFailed, $"Failed to create/access destination directory: {ex.Message}", backupFileInfo, null));
+                                    continue;
+                                }
+
+                                var originalFileInfo = File.Exists(restoreDestFullPath) ? new FileInfo(restoreDestFullPath) : null;
+
+                                if (originalFileInfo == null ||
+                                    backupFileInfo.Length != originalFileInfo.Length ||
+                                    !AreFileTimesClose(backupFileInfo.LastWriteTimeUtc, originalFileInfo.LastWriteTimeUtc))
+                                {
+                                    try
+                                    {
+                                        await CopyFileAsync(backupFileInfo.FullName, restoreDestFullPath);
+                                        File.SetLastWriteTimeUtc(restoreDestFullPath, backupFileInfo.LastWriteTimeUtc);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        _logger.LogError(ex, "Error restoring file {BackupFile} to {RestoreDestFile} for app {AppId}", backupFileInfo.FullName, restoreDestFullPath, app.Id);
+                                        report.FileDifferences.Add(new FileDifference(relativePath, FileDifferenceType.OperationFailed, $"Failed to copy/update: {ex.Message}", backupFileInfo, originalFileInfo));
+                                    }
+                                }
+                                if (!report.FileDifferences.Any(fd => fd.RelativePath == relativePath && fd.DifferenceType == FileDifferenceType.OperationFailed))
+                                {
+                                    restoredRelativePaths.Add(relativePath);
+                                }
+                            }
+                        }
+
+                        if (mode == SyncMode.Sync && !skipSyncDeletionDueToEmptySource)
+                        {
+                            var (currentAppFiles, currentAppPathIssues, _) =
+                                GetPathContents(app.Paths, GetSpecialFolderRelativePath);
+                            report.PathIssues.AddRange(currentAppPathIssues.Select(pi =>
+                                new PathIssue(pi.PathSpec, pi.ExpandedPath, pi.IssueType, $"Restore Destination Sync Check (App Location): {pi.Description}")));
+
+                            bool criticalAppPathIssueForSync = currentAppPathIssues.Any(pi =>
+                                pi.IssueType == PathIssueType.PathSpecNullOrEmpty ||
+                                pi.IssueType == PathIssueType.PathUnexpandable ||
+                                pi.IssueType == PathIssueType.PathInaccessible);
+
+                            if (criticalAppPathIssueForSync)
+                            {
+                                _logger.LogWarning("SYNC Restore: Critical issue reading original application paths for app {AppId}. Cannot perform deletions.", app.Id);
+                                report.PathIssues.Add(new PathIssue(string.Join(";", app.Paths.Take(3)) + (app.Paths.Count > 3 ? "..." : ""), null, PathIssueType.OperationPrevented, "SYNC Restore: Deletion step skipped due to critical issues accessing original application paths."));
+                            }
+                            else
+                            {
+                                foreach (var (liveRelativePath, liveFileInfo) in currentAppFiles)
+                                {
+                                    if (!restoredRelativePaths.Contains(liveRelativePath))
+                                    {
+                                        bool restoreAttemptedAndFailed = report.FileDifferences.Any(fd =>
+                                            fd.RelativePath == liveRelativePath &&
+                                            fd.DifferenceType == FileDifferenceType.OperationFailed &&
+                                            fd.SourceFileInfo != null); // SourceFileInfo indicates it was from backup attempt
+
+                                        if (!restoreAttemptedAndFailed)
                                         {
-                                            _logger.LogInformation("SYNC Restore: Deleting {LiveFileFullPath} from app {AppId} as it's not in the current backup set being restored.", liveFileFullPath, app.Id);
-                                            await _retryPolicy.ExecuteAsync(() => Task.Run(() => File.Delete(liveFileFullPath)));
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            _logger.LogError(ex, "Error deleting live file {LiveFileFullPath} during SYNC restore for app {AppId}", liveFileFullPath, app.Id);
-                                            report.FileDifferences.Add(new FileDifference(Path.GetRelativePath(targetPathInfo.Expanded, liveFileFullPath), FileDifferenceType.OperationFailed, $"Failed to delete from live path (SYNC mode): {ex.Message}", null, liveFileInfo));
+                                            try
+                                            {
+                                                _logger.LogInformation("SYNC Restore: Deleting {AppFileFullPath} as it's not in the backup (or wasn't restored) for app {AppId}", liveFileInfo.FullName, app.Id);
+                                                await _retryPolicy.ExecuteAsync(() => Task.Run(() => File.Delete(liveFileInfo.FullName)));
+                                                // report.FileDifferences.Add(new FileDifference(liveRelativePath, FileDifferenceType.DestinationOnly, "Deleted from application location (SYNC mode, not in backup).", null, liveFileInfo));
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                _logger.LogError(ex, "Error deleting file {AppFileFullPath} during SYNC restore for app {AppId}", liveFileInfo.FullName, app.Id);
+                                                report.FileDifferences.Add(new FileDifference(liveRelativePath, FileDifferenceType.OperationFailed, $"Failed to delete from application location (SYNC mode): {ex.Message}", null, liveFileInfo));
+                                            }
                                         }
                                     }
                                 }
-                                if (targetPathInfo.IsDir) DeleteEmptyDirectories(currentLivePathTarget);
+
+                                foreach (var pathSpecEntry in app.Paths)
+                                {
+                                    if (string.IsNullOrWhiteSpace(pathSpecEntry)) continue;
+                                    var expandedPath = SpecialFolderUtil.ExpandSpecialFolders(pathSpecEntry);
+                                    if (string.IsNullOrWhiteSpace(expandedPath)) continue;
+
+                                    bool isLikelyDirectorySpec = pathSpecEntry.EndsWith(Path.DirectorySeparatorChar.ToString()) ||
+                                                               pathSpecEntry.EndsWith(Path.AltDirectorySeparatorChar.ToString());
+
+                                    string pathToClean = isLikelyDirectorySpec ? expandedPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) : expandedPath;
+
+                                    if (Directory.Exists(pathToClean))
+                                    {
+                                        DeleteEmptyDirectories(pathToClean);
+                                    }
+                                }
                             }
+                        }
+                        else if (mode == SyncMode.Sync && skipSyncDeletionDueToEmptySource)
+                        {
+                            _logger.LogInformation("SYNC Restore: Deletion from app location for app {AppId} was skipped because backup source was empty.", app.Id);
                         }
                         report.DetermineOverallStatus();
                     }
@@ -614,24 +634,11 @@ namespace BackupWarden.Services.Business
             });
         }
 
-
         private readonly struct ExpandedPathInfo(string original, string expanded, bool isDir)
         {
             public string Original { get; } = original;
             public string Expanded { get; } = expanded;
             public bool IsDir { get; } = isDir;
-        }
-
-        private async Task RestoreFileInternalAsync(string backupFile, string destFile)
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(destFile)!);
-            if (File.Exists(backupFile))
-            {
-                await CopyFileAsync(backupFile, destFile);
-                var backupInfo = new FileInfo(backupFile);
-                try { File.SetLastWriteTimeUtc(destFile, backupInfo.LastWriteTimeUtc); }
-                catch (IOException ex) { _logger.LogError(ex, "Could not set LastWriteTimeUtc for {destFile}", destFile); }
-            }
         }
 
         private static string GetDriveLetterRelativePath(string fullPath)
@@ -671,17 +678,22 @@ namespace BackupWarden.Services.Business
             try
             {
                 foreach (var dir in Directory.EnumerateDirectories(rootDirectory, "*", SearchOption.AllDirectories)
-                    .OrderByDescending(d => d.Length))
+                    .OrderByDescending(d => d.Length)) // Process deepest first
                 {
+                    // Check if directory is empty (of files and subdirectories)
                     if (!Directory.EnumerateFileSystemEntries(dir).Any())
                     {
-                        try { Directory.Delete(dir); }
-                        catch (IOException ex) { _logger.LogError(ex, "Could not delete empty directory {Directory}", dir); }
-                        catch (UnauthorizedAccessException ex) { _logger.LogError(ex, "Access denied deleting empty directory {Directory}", dir); }
+                        try
+                        {
+                            Directory.Delete(dir);
+                            _logger.LogInformation("Deleted empty directory {Directory}", dir);
+                        }
+                        catch (IOException ex) { _logger.LogWarning(ex, "Could not delete empty directory {Directory} (possibly in use or timing issue).", dir); }
+                        catch (UnauthorizedAccessException ex) { _logger.LogWarning(ex, "Access denied deleting empty directory {Directory}.", dir); }
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) // Catch broader exceptions for the enumeration itself
             {
                 _logger.LogError(ex, "Error during DeleteEmptyDirectories for {rootDirectory}", rootDirectory);
             }

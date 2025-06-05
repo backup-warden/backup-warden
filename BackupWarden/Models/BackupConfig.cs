@@ -35,22 +35,32 @@ namespace BackupWarden.Models
         OperationFailed         // A specific file/directory operation failed (e.g. copy, delete)
     }
 
-    public class PathIssue
+    public class PathIssue(string pathSpec, string? expandedPath, PathIssueType issueType, string description)
     {
-        public string PathSpec { get; } // The original path spec from AppConfig.Paths or the backup root
-        public string? ExpandedPath { get; } // The expanded path, if available
-        public PathIssueType IssueType { get; }
-        public string Description { get; }
+        public string PathSpec { get; } = pathSpec;
+        public string? ExpandedPath { get; } = expandedPath;
+        public PathIssueType IssueType { get; } = issueType;
+        public string Description { get; } = description;
 
-        public PathIssue(string pathSpec, string? expandedPath, PathIssueType issueType, string description)
+        public override string ToString()
         {
-            PathSpec = pathSpec;
-            ExpandedPath = expandedPath;
-            IssueType = issueType;
-            Description = description;
-        }
+            string mainPathToDisplay = ExpandedPath ?? PathSpec;
+            string displayDescription = Description;
 
-        public override string ToString() => $"[{IssueType}] {(ExpandedPath ?? PathSpec)}: {Description}";
+            // If the main path (that will be displayed before the colon) 
+            // is also found quoted within the description string,
+            // replace that quoted occurrence with a generic placeholder to reduce verbosity.
+            if (!string.IsNullOrEmpty(mainPathToDisplay)) // Ensure mainPathToDisplay is not null or empty before creating quoted version
+            {
+                string quotedMainPath = $"'{mainPathToDisplay}'";
+                if (displayDescription.Contains(quotedMainPath))
+                {
+                    displayDescription = displayDescription.Replace(quotedMainPath, "(this path)");
+                }
+            }
+
+            return $"[{IssueType}] {mainPathToDisplay}: {displayDescription}";
+        }
     }
 
     public enum FileDifferenceType
@@ -61,29 +71,21 @@ namespace BackupWarden.Models
         OperationFailed             // An operation on this file failed (e.g. copy, delete)
     }
 
-    public class FileDifference
+    public class FileDifference(string relativePath, FileDifferenceType differenceType, string description, FileInfo? sourceFileInfo = null, FileInfo? destinationFileInfo = null)
     {
-        public string RelativePath { get; }
-        public FileDifferenceType DifferenceType { get; }
-        public FileInfo? SourceFileInfo { get; } // Null if DestinationOnly
-        public FileInfo? DestinationFileInfo { get; } // Null if SourceOnly
-        public string Description { get; }
+        public string RelativePath { get; } = relativePath;
+        public FileDifferenceType DifferenceType { get; } = differenceType;
+        public FileInfo? SourceFileInfo { get; } = sourceFileInfo;
+        public FileInfo? DestinationFileInfo { get; } = destinationFileInfo;
+        public string Description { get; } = description;
 
-        public FileDifference(string relativePath, FileDifferenceType differenceType, string description, FileInfo? sourceFileInfo = null, FileInfo? destinationFileInfo = null)
-        {
-            RelativePath = relativePath;
-            DifferenceType = differenceType;
-            Description = description;
-            SourceFileInfo = sourceFileInfo;
-            DestinationFileInfo = destinationFileInfo;
-        }
         public override string ToString() => $"[{DifferenceType}] {RelativePath}: {Description}";
     }
 
     public class AppSyncReport
     {
-        public List<PathIssue> PathIssues { get; } = new List<PathIssue>();
-        public List<FileDifference> FileDifferences { get; } = new List<FileDifference>();
+        public List<PathIssue> PathIssues { get; } = [];
+        public List<FileDifference> FileDifferences { get; } = [];
         public SyncStatus OverallStatus { get; set; } = SyncStatus.Unknown;
 
         // Critical issues are those that likely prevent the core operation or indicate severe misconfiguration.
@@ -120,7 +122,7 @@ namespace BackupWarden.Models
                 // If there are only warnings (like empty paths, or non-critical PathNotFound) or prevented ops, but no diffs or critical issues
                 OverallStatus = SyncStatus.Warning;
             }
-            else if (!PathIssues.Any() && !FileDifferences.Any()) // No issues of any kind, no differences
+            else if (PathIssues.Count == 0 && FileDifferences.Count == 0) // No issues of any kind, no differences
             {
                 OverallStatus = SyncStatus.InSync;
             }
@@ -136,17 +138,17 @@ namespace BackupWarden.Models
         {
             var sb = new StringBuilder();
             sb.AppendLine($"Overall Status: {OverallStatus}");
-            if (PathIssues.Any())
+            if (PathIssues.Count != 0)
             {
                 sb.AppendLine("Path Issues:");
                 foreach (var issue in PathIssues) sb.AppendLine($"  - {issue}");
             }
-            if (FileDifferences.Any())
+            if (FileDifferences.Count != 0)
             {
                 sb.AppendLine("File Differences:");
                 foreach (var diff in FileDifferences) sb.AppendLine($"  - {diff}");
             }
-            if (!PathIssues.Any() && !FileDifferences.Any())
+            if (PathIssues.Count == 0 && FileDifferences.Count == 0)
             {
                 sb.AppendLine("No issues or differences found.");
             }

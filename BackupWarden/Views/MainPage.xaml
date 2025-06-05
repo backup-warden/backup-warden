@@ -64,7 +64,7 @@
                                     IsReadOnly="True"
                                     Text="{x:Bind}" />
                                 <Button
-                                    Command="{Binding DataContext.RemoveYamlFileCommand, ElementName=RootPage}"
+                                    Command="{Binding DataContext.RemoveYamlFileCommand, ElementName=RootPage, Mode=OneWay}"
                                     CommandParameter="{x:Bind}"
                                     Content="Remove" />
                             </StackPanel>
