@@ -39,10 +39,9 @@ namespace BackupWarden.Services.Business
             return (t1 > t2) ? (t1 - t2 <= tolerance) : (t2 - t1 <= tolerance);
         }
 
-        private static (Dictionary<string, FileInfo> FilesByRelativePath, List<PathIssue> Issues, bool IsEffectivelyEmptyOverall) GetPathContents(
+        private (Dictionary<string, FileInfo> FilesByRelativePath, List<PathIssue> Issues, bool IsEffectivelyEmptyOverall) GetPathContents(
             IEnumerable<string> pathSpecs,
             Func<string, string> getRelativePathFunc,
-            ILogger logger,
             string? baseDirectoryForRelativePath = null)
         {
             var fileDetails = new Dictionary<string, FileInfo>(StringComparer.OrdinalIgnoreCase);
@@ -105,7 +104,7 @@ namespace BackupWarden.Services.Business
                             }
                             else
                             {
-                                logger.LogDebug("Duplicate relative path '{RelativePath}' from spec '{PathSpec}' (expanded: {ExpandedPath}). Keeping first entry.", relPath, pathSpec, file);
+                                _logger.LogDebug("Duplicate relative path '{RelativePath}' from spec '{PathSpec}' (expanded: {ExpandedPath}). Keeping first entry.", relPath, pathSpec, file);
                             }
                         }
                     }
@@ -139,7 +138,7 @@ namespace BackupWarden.Services.Business
                         }
                         else
                         {
-                            logger.LogDebug("Duplicate relative path '{RelativePath}' for file spec '{PathSpec}' (expanded: {ExpandedPath}). Keeping first entry.", relPath, pathSpec, actualPath);
+                            _logger.LogDebug("Duplicate relative path '{RelativePath}' for file spec '{PathSpec}' (expanded: {ExpandedPath}). Keeping first entry.", relPath, pathSpec, actualPath);
                         }
                     }
                     catch (UnauthorizedAccessException ex)
@@ -190,7 +189,7 @@ namespace BackupWarden.Services.Business
                     try
                     {
                         var (sourceFiles, sourcePathIssues, sourceIsEffectivelyEmpty) =
-                            GetPathContents(app.Paths, GetSpecialFolderRelativePath, _logger);
+                            GetPathContents(app.Paths, GetSpecialFolderRelativePath);
                         report.PathIssues.AddRange(sourcePathIssues);
 
                         var appDestPath = Path.Combine(destinationRoot, app.Id);
@@ -198,7 +197,6 @@ namespace BackupWarden.Services.Business
                         var (destFiles, destPathIssues, destIsEffectivelyEmpty) =
                             GetPathContents(new[] { appDestPath + Path.DirectorySeparatorChar },
                                             filePath => Path.GetRelativePath(appDestPath, filePath),
-                                            _logger,
                                             appDestPath);
 
                         report.PathIssues.AddRange(destPathIssues.Select(issue => new PathIssue(
@@ -283,7 +281,7 @@ namespace BackupWarden.Services.Business
                     try
                     {
                         var (sourceFiles, sourcePathIssues, sourceIsEffectivelyEmpty) =
-                            GetPathContents(app.Paths, GetSpecialFolderRelativePath, _logger);
+                            GetPathContents(app.Paths, GetSpecialFolderRelativePath);
                         report.PathIssues.AddRange(sourcePathIssues);
 
                         bool criticalSourceIssue = sourcePathIssues.Any(pi =>
@@ -371,7 +369,7 @@ namespace BackupWarden.Services.Business
 
                         if (mode == SyncMode.Sync)
                         {
-                            var (destFilesForSync, destPathIssuesForSync, _) = GetPathContents(new[] { appDest + Path.DirectorySeparatorChar }, filePath => Path.GetRelativePath(appDest, filePath), _logger, appDest);
+                            var (destFilesForSync, destPathIssuesForSync, _) = GetPathContents(new[] { appDest + Path.DirectorySeparatorChar }, filePath => Path.GetRelativePath(appDest, filePath), appDest);
                             report.PathIssues.AddRange(destPathIssuesForSync.Select(issue => new PathIssue(issue.PathSpec, issue.ExpandedPath, issue.IssueType, $"SYNC Deletion Check (Backup Dest): {issue.Description}")));
 
                             foreach (var (relativeDestPath, destFileInfoForSync) in destFilesForSync)
@@ -439,7 +437,7 @@ namespace BackupWarden.Services.Business
                     try
                     {
                         // Validate AppConfig.Paths (live destination paths for restore)
-                        var (livePathTargets, livePathIssues, _) = GetPathContents(app.Paths, GetSpecialFolderRelativePath, _logger);
+                        var (livePathTargets, livePathIssues, _) = GetPathContents(app.Paths, GetSpecialFolderRelativePath);
                         report.PathIssues.AddRange(livePathIssues.Select(issue => new PathIssue(issue.PathSpec, issue.ExpandedPath, issue.IssueType, $"Live Target Path: {issue.Description}")));
 
                         bool criticalLivePathIssue = livePathIssues.Any(pi =>
@@ -485,8 +483,7 @@ namespace BackupWarden.Services.Business
                         // Get files from backup source
                         var (backupFiles, backupPathIssues, backupIsEffectivelyEmpty) =
                             GetPathContents(new[] { appBackupSourceRoot + Path.DirectorySeparatorChar },
-                                filePath => Path.GetRelativePath(appBackupSourceRoot, filePath),
-                                _logger, appBackupSourceRoot);
+                                filePath => Path.GetRelativePath(appBackupSourceRoot, filePath), appBackupSourceRoot);
                         report.PathIssues.AddRange(backupPathIssues.Select(issue => new PathIssue(issue.PathSpec, issue.ExpandedPath, issue.IssueType, $"Backup Source: {issue.Description}")));
 
                         bool criticalBackupSourceIssue = backupPathIssues.Any(pi => pi.IssueType == PathIssueType.PathInaccessible); // Inaccessible backup source is critical
@@ -576,7 +573,6 @@ namespace BackupWarden.Services.Business
                                 var (liveFilesToCheck, livePathIssuesForSync, _) = GetPathContents(
                                     new[] { targetPathInfo.IsDir ? currentLivePathTarget + Path.DirectorySeparatorChar : currentLivePathTarget },
                                     filePath => Path.GetFullPath(filePath),
-                                    _logger,
                                     targetPathInfo.IsDir ? currentLivePathTarget : Path.GetDirectoryName(currentLivePathTarget)
                                 );
                                 report.PathIssues.AddRange(livePathIssuesForSync.Select(issue => new PathIssue(issue.PathSpec, issue.ExpandedPath, issue.IssueType, $"SYNC Deletion Check (Live Path): {issue.Description}")));
@@ -626,7 +622,7 @@ namespace BackupWarden.Services.Business
             public bool IsDir { get; } = isDir;
         }
 
-        private static async Task RestoreFileInternalAsync(string backupFile, string destFile)
+        private async Task RestoreFileInternalAsync(string backupFile, string destFile)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(destFile)!);
             if (File.Exists(backupFile))
@@ -634,7 +630,7 @@ namespace BackupWarden.Services.Business
                 await CopyFileAsync(backupFile, destFile);
                 var backupInfo = new FileInfo(backupFile);
                 try { File.SetLastWriteTimeUtc(destFile, backupInfo.LastWriteTimeUtc); }
-                catch (IOException ex) { Debug.WriteLine($"Could not set LastWriteTimeUtc for {destFile}: {ex.Message}"); }
+                catch (IOException ex) { _logger.LogError(ex, "Could not set LastWriteTimeUtc for {destFile}", destFile); }
             }
         }
 
@@ -669,7 +665,7 @@ namespace BackupWarden.Services.Business
             });
         }
 
-        private static void DeleteEmptyDirectories(string rootDirectory)
+        private void DeleteEmptyDirectories(string rootDirectory)
         {
             if (!Directory.Exists(rootDirectory)) return;
             try
@@ -680,14 +676,14 @@ namespace BackupWarden.Services.Business
                     if (!Directory.EnumerateFileSystemEntries(dir).Any())
                     {
                         try { Directory.Delete(dir); }
-                        catch (IOException ex) { Debug.WriteLine($"Could not delete empty directory {dir}: {ex.Message}"); }
-                        catch (UnauthorizedAccessException ex) { Debug.WriteLine($"Access denied deleting empty directory {dir}: {ex.Message}"); }
+                        catch (IOException ex) { _logger.LogError(ex, "Could not delete empty directory {Directory}", dir); }
+                        catch (UnauthorizedAccessException ex) { _logger.LogError(ex, "Access denied deleting empty directory {Directory}", dir); }
                     }
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error during DeleteEmptyDirectories for {rootDirectory}: {ex.Message}");
+                _logger.LogError(ex, "Error during DeleteEmptyDirectories for {rootDirectory}", rootDirectory);
             }
         }
     }
