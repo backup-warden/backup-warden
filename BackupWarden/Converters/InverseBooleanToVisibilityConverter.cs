@@ -4,20 +4,16 @@ using System;
 
 namespace BackupWarden.Converters
 {
-    public sealed partial class BooleanToVisibilityConverter : IValueConverter
+    public sealed partial class InverseBooleanToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
-            if (value is bool b)
-                return b ? Visibility.Visible : Visibility.Collapsed;
-            return Visibility.Collapsed;
+            return (value is bool b && b) ? Visibility.Collapsed : Visibility.Visible;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, string language)
         {
-            if (value is Visibility v)
-                return v == Visibility.Visible;
-            return false;
+            return (value is Visibility v && v == Visibility.Collapsed);
         }
     }
 }

@@ -46,11 +46,17 @@ namespace BackupWarden.ViewModels
         public bool IsRunning
         {
             get => _isRunning;
-            set
-            {
-                SetProperty(ref _isRunning, value);
-            }
+            set => SetProperty(ref _isRunning, value);
         }
+
+        private bool _isCheckingSyncStatus;
+        public bool IsCheckingSyncStatus
+        {
+            get => _isCheckingSyncStatus;
+            set => SetProperty(ref _isCheckingSyncStatus, value);
+        }
+
+        public bool ShowProgressBar => IsRunning && !IsCheckingSyncStatus;
 
         private int _progress;
         public int Progress
@@ -80,6 +86,7 @@ namespace BackupWarden.ViewModels
         public IAsyncRelayCommand BrowseDestinationFolderCommand { get; }
         public IRelayCommand<string> RemoveYamlFileCommand { get; }
         public IAsyncRelayCommand RestoreCommand { get; }
+        public IAsyncRelayCommand RefreshSyncStatusCommand { get; }
 
         public MainViewModel(
             IAppSettingsService appSettingsService,
@@ -109,6 +116,7 @@ namespace BackupWarden.ViewModels
             BrowseDestinationFolderCommand = new AsyncRelayCommand(BrowseDestinationFolderAsync, CanModifySettings);
             BackupCommand = new AsyncRelayCommand(BackupAsync, CanBackup);
             RestoreCommand = new AsyncRelayCommand(RestoreAsync, CanRestore);
+            RefreshSyncStatusCommand = new AsyncRelayCommand(CheckAppsSyncStatusAsync, CanModifySettings);
 
             LoadAppSettings();
             LoadAppsFromConfigs();
@@ -157,13 +165,18 @@ namespace BackupWarden.ViewModels
                     BackupCommand.NotifyCanExecuteChanged();
                     RestoreCommand.NotifyCanExecuteChanged();
                 }
-                else if (e.PropertyName is nameof(IsRunning))
+                else if (e.PropertyName is nameof(IsRunning) || e.PropertyName is nameof(IsCheckingSyncStatus))
                 {
-                    BackupCommand.NotifyCanExecuteChanged();
-                    RestoreCommand.NotifyCanExecuteChanged();
-                    AddYamlFileCommand.NotifyCanExecuteChanged();
-                    BrowseDestinationFolderCommand.NotifyCanExecuteChanged();
-                    RemoveYamlFileCommand.NotifyCanExecuteChanged();
+                    OnPropertyChanged(nameof(ShowProgressBar));
+                    if (e.PropertyName is nameof(IsRunning))
+                    {
+                        BackupCommand.NotifyCanExecuteChanged();
+                        RestoreCommand.NotifyCanExecuteChanged();
+                        AddYamlFileCommand.NotifyCanExecuteChanged();
+                        BrowseDestinationFolderCommand.NotifyCanExecuteChanged();
+                        RemoveYamlFileCommand.NotifyCanExecuteChanged();
+                        RefreshSyncStatusCommand.NotifyCanExecuteChanged();
+                    }
                 }
             };
         }
@@ -192,6 +205,7 @@ namespace BackupWarden.ViewModels
             try
             {
                 IsRunning = true;
+                IsCheckingSyncStatus = true;
                 UpdateSyncStatusToUnknown(LoadedApps);
                 await _backupSyncService.UpdateSyncStatusAsync(LoadedApps, DestinationFolder, _syncStatusDispatcher.Invoke);
             }
@@ -202,6 +216,7 @@ namespace BackupWarden.ViewModels
             }
             finally
             {
+                IsCheckingSyncStatus = false;
                 IsRunning = false;
             }
         }
