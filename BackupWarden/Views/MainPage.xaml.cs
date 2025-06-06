@@ -1,5 +1,6 @@
 using BackupWarden.Models;
 using BackupWarden.ViewModels;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 // To learn more about WinUI, the WinUI project structure,
@@ -19,6 +20,14 @@ namespace BackupWarden.Views
         }
 
         public MainViewModel ViewModel { get; }
+
+        private void SyncModeHelpButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (SyncModeTeachingTip is not null)
+            {
+                SyncModeTeachingTip.IsOpen = true;
+            }
+        }
 
         private void ListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {

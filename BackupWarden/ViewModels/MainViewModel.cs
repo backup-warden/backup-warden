@@ -21,6 +21,15 @@ namespace BackupWarden.ViewModels
         public int SelectedAppsCount => SelectedApps.Count;
         public ObservableCollection<AppConfig> SelectedApps { get; set; } = [];
 
+        public ObservableCollection<SyncMode> SyncModes { get; } = [SyncMode.Copy, SyncMode.Sync];
+
+        private SyncMode _selectedSyncMode = SyncMode.Copy;
+        public SyncMode SelectedSyncMode
+        {
+            get => _selectedSyncMode;
+            set => SetProperty(ref _selectedSyncMode, value);
+        }
+
 
         private string? _destinationFolder;
 
@@ -89,10 +98,11 @@ namespace BackupWarden.ViewModels
             _logger = logger;
 
             _progressReporter = new Progress<int>(percent => Progress = percent);
-            _syncStatusDispatcher = new ContextCallback<AppConfig, AppSyncReport>((app, status) => {
+            _syncStatusDispatcher = new ContextCallback<AppConfig, AppSyncReport>((app, status) =>
+            {
                 app.SyncStatus = status.OverallStatus;
                 app.LastSyncReport = status;
-            } );
+            });
 
             AddYamlFileCommand = new AsyncRelayCommand(AddYamlFileAsync, CanModifySettings);
             RemoveYamlFileCommand = new RelayCommand<string?>(RemoveYamlFile, (_) => CanModifySettings());
@@ -259,7 +269,8 @@ namespace BackupWarden.ViewModels
                 UpdateSyncStatusToUnknown(SelectedApps);
                 await _backupSyncService.BackupAsync(
                     SelectedApps,
-                    DestinationFolder!,SyncMode.Copy,
+                    DestinationFolder!,
+                    SelectedSyncMode,
                     _progressReporter, _syncStatusDispatcher.Invoke);
             }
             catch (Exception ex)
@@ -284,7 +295,8 @@ namespace BackupWarden.ViewModels
                 UpdateSyncStatusToUnknown(SelectedApps);
                 await _backupSyncService.RestoreAsync(
                     SelectedApps,
-                    DestinationFolder!, SyncMode.Copy,
+                    DestinationFolder!,
+                    SelectedSyncMode,
                     _progressReporter, _syncStatusDispatcher.Invoke);
             }
             catch (Exception ex)

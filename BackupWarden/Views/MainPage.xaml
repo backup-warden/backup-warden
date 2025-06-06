@@ -90,12 +90,85 @@
         <StackPanel
             Grid.Row="2"
             Margin="0,16,0,0"
+            VerticalAlignment="Center"
             Orientation="Horizontal"
-            Spacing="8">
-            <Button Command="{x:Bind ViewModel.BackupCommand, Mode=OneWay}" Content="Backup" />
-            <Button Command="{x:Bind ViewModel.RestoreCommand, Mode=OneWay}" Content="Restore" />
+            Spacing="16">
+
+            <StackPanel
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="4">
+                <ComboBox
+                    x:Name="SyncModeComboBox"
+                    Width="120"
+                    VerticalAlignment="Center"
+                    ItemsSource="{x:Bind ViewModel.SyncModes, Mode=OneWay}"
+                    SelectedItem="{x:Bind ViewModel.SelectedSyncMode, Mode=TwoWay}" />
+                <Button
+                    x:Name="SyncModeHelpButton"
+                    Width="32"
+                    Height="32"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    Click="SyncModeHelpButton_Click"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    ToolTipService.ToolTip="Get help on Sync Modes">
+                    <FontIcon
+                        FontFamily="Segoe Fluent Icons"
+                        FontSize="16"
+                        Glyph="&#xE946;" />
+                </Button>
+            </StackPanel>
+
+            <TeachingTip
+                x:Name="SyncModeTeachingTip"
+                Title="Understanding Sync Modes"
+                CloseButtonContent="Got it!"
+                IsLightDismissEnabled="True"
+                PreferredPlacement="Bottom"
+                Subtitle="Choose how files are managed during backup and restore operations."
+                Target="{x:Bind SyncModeComboBox}">
+                <TeachingTip.IconSource>
+                    <SymbolIconSource Symbol="SyncFolder" />
+                </TeachingTip.IconSource>
+                <StackPanel
+                    MinWidth="300"
+                    MaxWidth="400"
+                    Margin="0,8,0,0"
+                    Padding="4,0"
+                    Spacing="4">
+                    <TextBlock
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Text="Copy Mode" />
+                    <TextBlock Text="Files from the source are copied to the destination. If files with the same names already exist in the destination, they will be overwritten. This mode does not delete any files from the destination." TextWrapping="Wrap" />
+                    <TextBlock
+                        Margin="0,8,0,0"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Text="Sync Mode" />
+                    <TextBlock Text="The destination is made an exact replica of the source. Files are copied from source to destination. Any files present in the destination but not in the source are deleted. Use with caution, as this can lead to data loss in the destination if files were not intended to be removed." TextWrapping="Wrap" />
+                </StackPanel>
+            </TeachingTip>
+
+            <StackPanel
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="8">
+                <Button
+                    VerticalAlignment="Center"
+                    Command="{x:Bind ViewModel.BackupCommand, Mode=OneWay}"
+                    Content="Backup"
+                    Style="{StaticResource AccentButtonStyle}" />
+                <Button
+                    VerticalAlignment="Center"
+                    Command="{x:Bind ViewModel.RestoreCommand, Mode=OneWay}"
+                    Content="Restoraae" />
+            </StackPanel>
+
             <ProgressBar
                 Width="150"
+                VerticalAlignment="Center"
                 Maximum="100"
                 Minimum="0"
                 Visibility="{x:Bind ViewModel.IsRunning, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
