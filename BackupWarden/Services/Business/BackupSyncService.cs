@@ -36,135 +36,135 @@ namespace BackupWarden.Services.Business
             return (t1 > t2) ? (t1 - t2 <= tolerance) : (t2 - t1 <= tolerance);
         }
 
+        private (List<FileInfo> Files, List<PathIssue> Issues) ProcessSinglePathSpec(
+            string pathSpec,
+            Func<string, string> getRelativePathFunc,
+            PathIssueSource issueSource,
+            string? baseDirectoryForRelativePath)
+        {
+            var files = new List<FileInfo>();
+            var issues = new List<PathIssue>();
+
+            if (string.IsNullOrWhiteSpace(pathSpec))
+            {
+                issues.Add(new PathIssue(pathSpec ?? "N/A", null, PathIssueType.PathSpecNullOrEmpty, issueSource, "Path specification is null or whitespace."));
+                return (files, issues);
+            }
+
+            var expandedPath = SpecialFolderUtil.ExpandSpecialFolders(pathSpec);
+            if (string.IsNullOrWhiteSpace(expandedPath))
+            {
+                issues.Add(new PathIssue(pathSpec, null, PathIssueType.PathUnexpandable, issueSource, $"Path specification '{pathSpec}' could not be expanded."));
+                return (files, issues);
+            }
+
+            bool isOriginalPathSpecDirectory = pathSpec.EndsWith(Path.DirectorySeparatorChar.ToString()) ||
+                                               pathSpec.EndsWith(Path.AltDirectorySeparatorChar.ToString());
+            var actualPath = isOriginalPathSpecDirectory ? expandedPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) : expandedPath;
+
+            if (isOriginalPathSpecDirectory)
+            {
+                if (!_fileSystemOperations.DirectoryExists(actualPath))
+                {
+                    issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathNotFound, issueSource, $"Directory '{actualPath}' (from '{pathSpec}') not found."));
+                    return (files, issues);
+                }
+                try
+                {
+                    var filesInDir = _fileSystemOperations.EnumerateFiles(actualPath, "*", SearchOption.AllDirectories).ToList();
+                    if (filesInDir.Count == 0)
+                    {
+                        issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathIsEffectivelyEmpty, issueSource, $"Directory '{actualPath}' (from '{pathSpec}') is empty."));
+                    }
+                    foreach (var file in filesInDir)
+                    {
+                        files.Add(_fileSystemOperations.GetFileInfo(file));
+                    }
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathInaccessible, issueSource, $"Access denied to directory '{actualPath}' (from '{pathSpec}'). Error: {ex.Message}"));
+                }
+                catch (DirectoryNotFoundException ex)
+                {
+                    issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathNotFound, issueSource, $"Directory '{actualPath}' (from '{pathSpec}') not found during enumeration. Error: {ex.Message}"));
+                }
+                catch (Exception ex)
+                {
+                    issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathInaccessible, issueSource, $"Error enumerating directory '{actualPath}' (from '{pathSpec}'). Error: {ex.Message}"));
+                }
+            }
+            else
+            {
+                if (!_fileSystemOperations.FileExists(actualPath))
+                {
+                    issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathNotFound, issueSource, $"File '{actualPath}' (from '{pathSpec}') not found."));
+                    return (files, issues);
+                }
+                try
+                {
+                    files.Add(_fileSystemOperations.GetFileInfo(actualPath));
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathInaccessible, issueSource, $"Access denied to file '{actualPath}' (from '{pathSpec}'). Error: {ex.Message}"));
+                }
+                catch (FileNotFoundException ex)
+                {
+                    issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathNotFound, issueSource, $"File '{actualPath}' (from '{pathSpec}') not found during info retrieval. Error: {ex.Message}"));
+                }
+                catch (Exception ex)
+                {
+                    issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathInaccessible, issueSource, $"Error accessing file '{actualPath}' (from '{pathSpec}'). Error: {ex.Message}"));
+                }
+            }
+            return (files, issues);
+        }
+
         private (Dictionary<string, FileInfo> FilesByRelativePath, List<PathIssue> Issues, bool IsEffectivelyEmptyOverall) GetPathContents(
             IEnumerable<string> pathSpecs,
             Func<string, string> getRelativePathFunc,
             PathIssueSource issueSource,
             string? baseDirectoryForRelativePath = null)
         {
-            var fileDetails = new Dictionary<string, FileInfo>(StringComparer.OrdinalIgnoreCase);
-            var issues = new List<PathIssue>();
-            bool isEffectivelyEmptyOverall = true;
+            var fileDetailsByRelativePath = new Dictionary<string, FileInfo>(StringComparer.OrdinalIgnoreCase);
+            var allIssues = new List<PathIssue>();
             bool anyValidPathSpecEncountered = false;
+            bool anyFilesFound = false;
 
             if (pathSpecs == null || !pathSpecs.Any())
             {
-                issues.Add(new PathIssue("N/A", null, PathIssueType.PathSpecNullOrEmpty, issueSource, "No path specifications provided."));
-                return (fileDetails, issues, true);
+                allIssues.Add(new PathIssue("N/A", null, PathIssueType.PathSpecNullOrEmpty, issueSource, "No path specifications provided."));
+                return (fileDetailsByRelativePath, allIssues, true);
             }
 
             foreach (var pathSpec in pathSpecs)
             {
-                if (string.IsNullOrWhiteSpace(pathSpec))
+                var (filesFromSpec, issuesFromSpec) = ProcessSinglePathSpec(pathSpec, getRelativePathFunc, issueSource, baseDirectoryForRelativePath);
+                allIssues.AddRange(issuesFromSpec);
+
+                if (!issuesFromSpec.Any(i => i.IssueType == PathIssueType.PathSpecNullOrEmpty || i.IssueType == PathIssueType.PathUnexpandable))
                 {
-                    issues.Add(new PathIssue(pathSpec ?? "N/A", null, PathIssueType.PathSpecNullOrEmpty, issueSource, "Path specification is null or whitespace."));
-                    continue;
+                    anyValidPathSpecEncountered = true;
                 }
 
-                var expandedPath = SpecialFolderUtil.ExpandSpecialFolders(pathSpec);
-                if (string.IsNullOrWhiteSpace(expandedPath))
+                foreach (var fi in filesFromSpec)
                 {
-                    issues.Add(new PathIssue(pathSpec, null, PathIssueType.PathUnexpandable, issueSource, $"Path specification '{pathSpec}' could not be expanded."));
-                    continue;
-                }
-
-                anyValidPathSpecEncountered = true;
-                bool isOriginalPathSpecDirectory = pathSpec.EndsWith(Path.DirectorySeparatorChar.ToString()) ||
-                                                   pathSpec.EndsWith(Path.AltDirectorySeparatorChar.ToString());
-
-                var actualPath = isOriginalPathSpecDirectory ? expandedPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) : expandedPath;
-
-                if (isOriginalPathSpecDirectory)
-                {
-                    if (!_fileSystemOperations.DirectoryExists(actualPath))
+                    var relPath = baseDirectoryForRelativePath != null ? Path.GetRelativePath(baseDirectoryForRelativePath, fi.FullName) : getRelativePathFunc(fi.FullName);
+                    if (!fileDetailsByRelativePath.ContainsKey(relPath))
                     {
-                        issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathNotFound, issueSource, $"Directory '{actualPath}' (from '{pathSpec}') not found."));
-                        continue;
-                    }
-                    try
-                    {
-                        var filesInDir = _fileSystemOperations.EnumerateFiles(actualPath, "*", SearchOption.AllDirectories).ToList();
-                        if (filesInDir.Count == 0)
-                        {
-                            issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathIsEffectivelyEmpty, issueSource, $"Directory '{actualPath}' (from '{pathSpec}') is empty."));
-                        }
-
-                        foreach (var file in filesInDir)
-                        {
-                            var fi = _fileSystemOperations.GetFileInfo(file);
-                            var relPath = baseDirectoryForRelativePath != null ? Path.GetRelativePath(baseDirectoryForRelativePath, file) : getRelativePathFunc(file);
-                            if (!fileDetails.ContainsKey(relPath))
-                            {
-                                fileDetails[relPath] = fi;
-                            }
-                            else
-                            {
-                                _logger.LogDebug("Duplicate relative path '{RelativePath}' from spec '{PathSpec}' (expanded: {ExpandedPath}). Keeping first entry.", relPath, pathSpec, file);
-                            }
-                        }
-                    }
-                    catch (UnauthorizedAccessException ex)
-                    {
-                        issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathInaccessible, issueSource, $"Access denied to directory '{actualPath}' (from '{pathSpec}'). Error: {ex.Message}"));
-                    }
-                    catch (DirectoryNotFoundException ex)
-                    {
-                        issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathNotFound, issueSource, $"Directory '{actualPath}' (from '{pathSpec}') not found during enumeration. Error: {ex.Message}"));
-                    }
-                    catch (Exception ex)
-                    {
-                        issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathInaccessible, issueSource, $"Error enumerating directory '{actualPath}' (from '{pathSpec}'). Error: {ex.Message}"));
-                    }
-                }
-                else
-                {
-                    if (!_fileSystemOperations.FileExists(actualPath))
-                    {
-                        issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathNotFound, issueSource, $"File '{actualPath}' (from '{pathSpec}') not found."));
-                        continue;
-                    }
-                    try
-                    {
-                        var fi = _fileSystemOperations.GetFileInfo(actualPath);
-                        var relPath = baseDirectoryForRelativePath != null ? Path.GetRelativePath(baseDirectoryForRelativePath, actualPath) : getRelativePathFunc(actualPath);
-                        if (!fileDetails.ContainsKey(relPath))
-                        {
-                            fileDetails[relPath] = fi;
-                        }
-                        else
-                        {
-                            _logger.LogDebug("Duplicate relative path '{RelativePath}' for file spec '{PathSpec}' (expanded: {ExpandedPath}). Keeping first entry.", relPath, pathSpec, actualPath);
-                        }
-                    }
-                    catch (UnauthorizedAccessException ex)
-                    {
-                        issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathInaccessible, issueSource, $"Access denied to file '{actualPath}' (from '{pathSpec}'). Error: {ex.Message}"));
-                    }
-                    catch (FileNotFoundException ex)
-                    {
-                        issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathNotFound, issueSource, $"File '{actualPath}' (from '{pathSpec}') not found during info retrieval. Error: {ex.Message}"));
-                    }
-                    catch (Exception ex)
-                    {
-                        issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathInaccessible, issueSource, $"Error accessing file '{actualPath}' (from '{pathSpec}'). Error: {ex.Message}"));
+                        fileDetailsByRelativePath[relPath] = fi;
+                        anyFilesFound = true;
                     }
                 }
             }
 
-            if (fileDetails.Count != 0)
-            {
-                isEffectivelyEmptyOverall = false;
-            }
-            else if (anyValidPathSpecEncountered && !issues.Any(i => i.IssueType == PathIssueType.PathIsEffectivelyEmpty && fileDetails.Count == 0))
-            {
-                isEffectivelyEmptyOverall = true;
-            }
-            else if (!anyValidPathSpecEncountered)
-            {
-                isEffectivelyEmptyOverall = true;
-            }
+            bool isEffectivelyEmptyOverall = !anyFilesFound;
+            if (anyValidPathSpecEncountered && anyFilesFound) isEffectivelyEmptyOverall = false;
+            else if (anyValidPathSpecEncountered && !anyFilesFound && !allIssues.Any(i => i.IssueType == PathIssueType.PathIsEffectivelyEmpty)) isEffectivelyEmptyOverall = true;
+            else if (!anyValidPathSpecEncountered) isEffectivelyEmptyOverall = true;
 
-            return (fileDetails, issues, isEffectivelyEmptyOverall);
+            return (fileDetailsByRelativePath, allIssues, isEffectivelyEmptyOverall);
         }
 
         private void ProcessSingleApp(
@@ -384,13 +384,12 @@ namespace BackupWarden.Services.Business
                     progress?.Report((int)(processedApps / (double)totalApps * 100));
                 }
             });
-
         }
 
-        private void HandleBackupSyncDeletion(AppSyncReport report, string appDestPath, List<PathIssue> sourcePathIssues, HashSet<string> backedUpRelativePaths, string appId)
+        private static (HashSet<string> ProtectedPaths, List<string> ProtectedPrefixes) DetermineProtectedBackupItems(List<PathIssue> sourcePathIssues)
         {
-            var protectedDeletionRelativePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var protectedDeletionRelativePrefixes = new List<string>();
+            var protectedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var protectedPrefixes = new List<string>();
 
             foreach (var issue in sourcePathIssues.Where(i => i.Source == PathIssueSource.Application && i.ExpandedPath != null && !string.IsNullOrWhiteSpace(i.PathSpec)))
             {
@@ -400,14 +399,20 @@ namespace BackupWarden.Services.Business
 
                 if (!originalSpecWasDirectory && issue.IssueType == PathIssueType.PathNotFound)
                 {
-                    protectedDeletionRelativePaths.Add(relativePathFromIssue);
+                    protectedPaths.Add(relativePathFromIssue);
                 }
                 else if (originalSpecWasDirectory && (issue.IssueType == PathIssueType.PathNotFound || issue.IssueType == PathIssueType.PathIsEffectivelyEmpty))
                 {
                     var prefix = relativePathFromIssue.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-                    protectedDeletionRelativePrefixes.Add(prefix);
+                    protectedPrefixes.Add(prefix);
                 }
             }
+            return (protectedPaths, protectedPrefixes);
+        }
+
+        private void HandleBackupSyncDeletion(AppSyncReport report, string appDestPath, List<PathIssue> sourcePathIssues, HashSet<string> backedUpRelativePaths, string appId)
+        {
+            var (protectedDeletionRelativePaths, protectedDeletionRelativePrefixes) = DetermineProtectedBackupItems(sourcePathIssues);
 
             var (destFilesForSync, destPathIssuesForSync, _) = GetPathContents([report.AppBackupRootPath], filePath => Path.GetRelativePath(appDestPath, filePath), PathIssueSource.BackupLocation, appDestPath);
             report.PathIssues.AddRange(destPathIssuesForSync);
@@ -433,7 +438,7 @@ namespace BackupWarden.Services.Business
 
                         if (toBePreserved)
                         {
-                            string originalPathSpec = sourcePathIssues.FirstOrDefault(pi => pi.ExpandedPath != null && GetSpecialFolderRelativePath(pi.ExpandedPath!) == (protectedDeletionRelativePaths.Contains(relativeDestPath) ? relativeDestPath : protectedDeletionRelativePrefixes.First(p => relativeDestPath.StartsWith(p, StringComparison.OrdinalIgnoreCase)).TrimEnd(Path.DirectorySeparatorChar)))?.PathSpec ?? "N/A";
+                            string originalPathSpec = sourcePathIssues.FirstOrDefault(pi => pi.ExpandedPath != null && GetSpecialFolderRelativePath(pi.ExpandedPath!) == (protectedDeletionRelativePaths.Contains(relativeDestPath) ? relativeDestPath : protectedDeletionRelativePrefixes.FirstOrDefault(p => relativeDestPath.StartsWith(p, StringComparison.OrdinalIgnoreCase))?.TrimEnd(Path.DirectorySeparatorChar)))?.PathSpec ?? "N/A";
                             _logger.LogInformation("SYNC Backup: Preserving backup item {DestFileFullPath} (corresponds to source PathSpec '{OriginalPathSpec}') as its source was missing or empty.", currentBackupFileInfo.FullName, originalPathSpec);
                             report.FileDifferences.Add(new FileDifference(
                                 relativeDestPath,
@@ -582,10 +587,9 @@ namespace BackupWarden.Services.Business
                     progress?.Report((int)(processedApps / (double)totalApps * 100));
                 }
             });
-
         }
 
-        private void HandleRestoreSyncDeletion(AppSyncReport report, AppConfig app, Dictionary<string, FileInfo> backupFiles, HashSet<string> restoredRelativePaths)
+        private static (HashSet<string> ProtectedPaths, List<string> ProtectedPrefixes) DetermineProtectedApplicationItemsForRestore(AppConfig app, Dictionary<string, FileInfo> backupFiles)
         {
             var preserveLiveRelativePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var preserveLiveRelativePrefixes = new List<string>();
@@ -617,6 +621,12 @@ namespace BackupWarden.Services.Business
                     }
                 }
             }
+            return (preserveLiveRelativePaths, preserveLiveRelativePrefixes);
+        }
+
+        private void HandleRestoreSyncDeletion(AppSyncReport report, AppConfig app, Dictionary<string, FileInfo> backupFiles, HashSet<string> restoredRelativePaths)
+        {
+            var (preserveLiveRelativePaths, preserveLiveRelativePrefixes) = DetermineProtectedApplicationItemsForRestore(app, backupFiles);
 
             var (currentAppFiles, currentAppPathIssues, _) =
                 GetPathContents(app.Paths, GetSpecialFolderRelativePath, PathIssueSource.Application);
@@ -650,8 +660,8 @@ namespace BackupWarden.Services.Business
                             if (preserveLiveRelativePaths.Contains(liveRelativePath)) return relPs == liveRelativePath;
                             if (preserveLiveRelativePrefixes.Any(pfx => liveRelativePath.StartsWith(pfx, StringComparison.OrdinalIgnoreCase)))
                             {
-                                var matchingPrefix = preserveLiveRelativePrefixes.First(pfx => liveRelativePath.StartsWith(pfx, StringComparison.OrdinalIgnoreCase));
-                                return (relPs.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar) == matchingPrefix;
+                                var matchingPrefix = preserveLiveRelativePrefixes.FirstOrDefault(pfx => liveRelativePath.StartsWith(pfx, StringComparison.OrdinalIgnoreCase));
+                                return matchingPrefix != null && (relPs.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar) == matchingPrefix;
                             }
                             return false;
                         }) ?? liveRelativePath;
@@ -700,7 +710,7 @@ namespace BackupWarden.Services.Business
 
                     string? pathToClean = isLikelyDirectorySpec ? expandedPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) : Path.GetDirectoryName(expandedPath);
 
-                    if (isLikelyDirectorySpec)
+                    if (isLikelyDirectorySpec && pathToClean != null && _fileSystemOperations.DirectoryExists(pathToClean))
                     {
                         _fileSystemOperations.DeleteEmptyDirectories(pathToClean);
                     }
