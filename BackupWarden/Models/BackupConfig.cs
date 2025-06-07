@@ -164,24 +164,24 @@ namespace BackupWarden.Models
         public string AppBackupRootPath { get; internal set; } = string.Empty;
 
         private bool AppSourceIsFatallyFlawed => PathIssues.Any(pi =>
-            pi.Source == PathIssueSource.Application &&
-            ((pi.IssueType == PathIssueType.PathSpecNullOrEmpty && pi.PathSpec == "N/A") || // AppConfig.Paths was empty
-             pi.IssueType == PathIssueType.PathUnexpandable ||
-             pi.IssueType == PathIssueType.PathInaccessible));
+                    pi.Source == PathIssueSource.Application &&
+                    ((pi.IssueType == PathIssueType.PathSpecNullOrEmpty && pi.PathSpec == "N/A") || // AppConfig.Paths was empty
+                     pi.IssueType == PathIssueType.PathUnexpandable ||
+                     pi.IssueType == PathIssueType.PathInaccessible));
 
         private bool HasOperationalFailures =>
             PathIssues.Any(pi => pi.IssueType == PathIssueType.OperationFailed) ||
             FileDifferences.Any(fd => fd.DifferenceType == FileDifferenceType.OperationFailed);
 
         private bool IsMissingBackupRoot => PathIssues.Any(pi =>
-            pi.Source == PathIssueSource.BackupLocation &&
-            pi.IssueType == PathIssueType.PathNotFound &&
+                    pi.Source == PathIssueSource.BackupLocation &&
+                    pi.IssueType == PathIssueType.PathNotFound &&
             !string.IsNullOrEmpty(AppBackupRootPath) &&
             pi.PathSpec == AppBackupRootPath);
 
         private bool HasDataDifferencesExcludingOnlyInApp => FileDifferences.Any(fd =>
-            fd.DifferenceType == FileDifferenceType.OnlyInBackup || // OnlyInBackup is a data difference
-            fd.DifferenceType == FileDifferenceType.ContentMismatch); // ContentMismatch is a data difference
+                    fd.DifferenceType == FileDifferenceType.OnlyInBackup || // OnlyInBackup is a data difference
+                    fd.DifferenceType == FileDifferenceType.ContentMismatch); // ContentMismatch is a data difference
                                                                       // OnlyInApplication is handled separately for NotYetBackedUp vs OutOfSync
 
         public void DetermineOverallStatus()
@@ -401,28 +401,39 @@ namespace BackupWarden.Models
                 {
                     _syncStatus = value;
                     PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SyncStatus)));
-                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SyncStatusDisplay)));
                 }
             }
         }
-        public string SyncStatusDisplay => SyncStatus.ToDisplayString();
 
-        private AppSyncReport? _lastSyncReport;
-        public AppSyncReport? LastSyncReport
+        public AppSyncReport? LastSyncReport { get; set; }
+
+        private string? _lastSyncReportSummary;
+        public string? LastSyncReportSummary
         {
-            get => _lastSyncReport;
+            get => _lastSyncReportSummary;
             set
             {
-                if (_lastSyncReport != value)
+                if (_lastSyncReportSummary != value)
                 {
-                    _lastSyncReport = value;
-                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LastSyncReport)));
+                    _lastSyncReportSummary = value;
                     PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LastSyncReportSummary)));
                 }
             }
         }
 
-        public string? LastSyncReportSummary => LastSyncReport?.ToSummaryString();
+        private string? _lastSyncReportDetail;
+        public string? LastSyncReportDetail
+        {
+            get => _lastSyncReportDetail;
+            set
+            {
+                if (_lastSyncReportDetail != value)
+                {
+                    _lastSyncReportDetail = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LastSyncReportDetail)));
+                }
+            }
+        }
 
         public event PropertyChangedEventHandler? PropertyChanged;
     }

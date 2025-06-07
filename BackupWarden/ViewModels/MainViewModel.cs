@@ -9,7 +9,6 @@ using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace BackupWarden.ViewModels
@@ -78,7 +77,7 @@ namespace BackupWarden.ViewModels
         private readonly ILogger<MainViewModel> _logger;
 
         private readonly Progress<int> _progressReporter;
-        private readonly ContextCallback<AppConfig, AppSyncReport> _syncStatusDispatcher;
+        private readonly ContextCallback<AppConfig, SyncStatus, string, string> _syncStatusDispatcher;
 
 
         public IAsyncRelayCommand AddYamlFileCommand { get; }
@@ -105,10 +104,11 @@ namespace BackupWarden.ViewModels
             _logger = logger;
 
             _progressReporter = new Progress<int>(percent => Progress = percent);
-            _syncStatusDispatcher = new ContextCallback<AppConfig, AppSyncReport>((app, status) =>
+            _syncStatusDispatcher = new ContextCallback<AppConfig, SyncStatus, string, string>((app, syncStatus, lastSyncReportSummary, lastSyncReportDetail) =>
             {
-                app.SyncStatus = status.OverallStatus;
-                app.LastSyncReport = status;
+                app.SyncStatus = syncStatus;
+                app.LastSyncReportSummary = lastSyncReportSummary;
+                app.LastSyncReportDetail = lastSyncReportDetail;
             });
 
             AddYamlFileCommand = new AsyncRelayCommand(AddYamlFileAsync, CanModifySettings);

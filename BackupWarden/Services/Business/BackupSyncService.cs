@@ -8,16 +8,15 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text; // Required for StringBuilder in AppSyncReport
 using System.Threading.Tasks;
 
 namespace BackupWarden.Services.Business
 {
     public interface IBackupSyncService
     {
-        Task UpdateSyncStatusAsync(IEnumerable<AppConfig> apps, string backupRoot, Action<AppConfig, AppSyncReport>? perAppStatusCallback = null);
-        Task RestoreAsync(IEnumerable<AppConfig> configs, string backupRoot, SyncMode mode, IProgress<int>? progress = null, Action<AppConfig, AppSyncReport>? perAppStatusCallback = null);
-        Task BackupAsync(IEnumerable<AppConfig> configs, string backupRoot, SyncMode mode, IProgress<int>? progress = null, Action<AppConfig, AppSyncReport>? perAppStatusCallback = null);
+        Task UpdateSyncStatusAsync(IEnumerable<AppConfig> apps, string backupRoot, Action<AppConfig, SyncStatus, string, string>? perAppStatusCallback = null);
+        Task RestoreAsync(IEnumerable<AppConfig> configs, string backupRoot, SyncMode mode, IProgress<int>? progress = null, Action<AppConfig, SyncStatus, string, string>? perAppStatusCallback = null);
+        Task BackupAsync(IEnumerable<AppConfig> configs, string backupRoot, SyncMode mode, IProgress<int>? progress = null, Action<AppConfig, SyncStatus, string, string>? perAppStatusCallback = null);
     }
 
     public class BackupSyncService : IBackupSyncService
@@ -173,7 +172,7 @@ namespace BackupWarden.Services.Business
         public async Task UpdateSyncStatusAsync(
             IEnumerable<AppConfig> apps,
             string backupRoot,
-            Action<AppConfig, AppSyncReport>? perAppStatusCallback = null)
+            Action<AppConfig, SyncStatus, string, string>? perAppStatusCallback = null)
         {
             await Task.Run(() =>
             {
@@ -181,6 +180,7 @@ namespace BackupWarden.Services.Business
                 {
                     if (app == null) continue;
                     var report = new AppSyncReport();
+                    app.LastSyncReport = report;
                     var appDestPath = Path.Combine(backupRoot, app.Id);
                     report.AppBackupRootPath = appDestPath + Path.DirectorySeparatorChar; // Set for DetermineOverallStatus
 
@@ -240,7 +240,7 @@ namespace BackupWarden.Services.Business
                         }
 
                         report.DetermineOverallStatus();
-                        perAppStatusCallback?.Invoke(app, report);
+                        perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
                     }
                     catch (Exception ex)
                     {
@@ -249,7 +249,7 @@ namespace BackupWarden.Services.Business
                         report.PathIssues.Add(new PathIssue("N/A", null, PathIssueType.OperationFailed, PathIssueSource.Operation, $"Operation failed due to critical error: {ex.Message}"));
                         if (app != null)
                         {
-                            perAppStatusCallback?.Invoke(app, report);
+                            perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
                         }
                     }
                 }
@@ -261,7 +261,7 @@ namespace BackupWarden.Services.Business
             string backupRoot,
             SyncMode mode,
             IProgress<int>? progress = null,
-            Action<AppConfig, AppSyncReport>? perAppStatusCallback = null)
+            Action<AppConfig, SyncStatus, string, string>? perAppStatusCallback = null)
         {
             await Task.Run(async () =>
             {
@@ -275,9 +275,10 @@ namespace BackupWarden.Services.Business
                     if (app == null) { processedApps++; progress?.Report((int)(processedApps / (double)totalApps * 100)); continue; }
 
                     var report = new AppSyncReport { OverallStatus = SyncStatus.Syncing };
+                    app.LastSyncReport = report;
                     var appDest = Path.Combine(backupRoot, app.Id);
                     report.AppBackupRootPath = appDest + Path.DirectorySeparatorChar; // Set for DetermineOverallStatus
-                    perAppStatusCallback?.Invoke(app, report);
+                    perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
 
                     bool skipSyncDeletionDueToEmptySource = false;
 
@@ -296,7 +297,7 @@ namespace BackupWarden.Services.Business
                         {
                             _logger.LogWarning("Critical source path problem for app {AppId}. Backup cannot proceed.", app.Id);
                             report.DetermineOverallStatus();
-                            perAppStatusCallback?.Invoke(app, report);
+                            perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
                             processedApps++;
                             progress?.Report((int)(processedApps / (double)totalApps * 100));
                             continue;
@@ -310,7 +311,7 @@ namespace BackupWarden.Services.Business
                                 report.PathIssues.Add(new PathIssue(appDest, appDest, PathIssueType.PathInaccessible, PathIssueSource.BackupLocation, $"Failed to create backup destination directory: {ex.Message}"));
                                 _logger.LogError(ex, "Failed to create backup destination directory for app {AppId}", app.Id);
                                 report.DetermineOverallStatus();
-                                perAppStatusCallback?.Invoke(app, report);
+                                perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
                                 processedApps++;
                                 progress?.Report((int)(processedApps / (double)totalApps * 100));
                                 continue;
@@ -328,7 +329,7 @@ namespace BackupWarden.Services.Business
                                 skipSyncDeletionDueToEmptySource = true;
                             }
                             report.DetermineOverallStatus();
-                            perAppStatusCallback?.Invoke(app, report);
+                            perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
                             processedApps++;
                             progress?.Report((int)(processedApps / (double)totalApps * 100));
                             continue;
@@ -465,7 +466,7 @@ namespace BackupWarden.Services.Business
                     }
                     finally
                     {
-                        perAppStatusCallback?.Invoke(app, report);
+                        perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
                         processedApps++;
                         progress?.Report((int)(processedApps / (double)totalApps * 100));
                     }
@@ -478,7 +479,7 @@ namespace BackupWarden.Services.Business
             string backupRoot,
             SyncMode mode,
             IProgress<int>? progress = null,
-            Action<AppConfig, AppSyncReport>? perAppStatusCallback = null)
+            Action<AppConfig, SyncStatus, string, string>? perAppStatusCallback = null)
         {
             await Task.Run(async () =>
             {
@@ -492,9 +493,10 @@ namespace BackupWarden.Services.Business
                     if (app == null) { processedApps++; progress?.Report((int)(processedApps / (double)totalApps * 100)); continue; }
 
                     var report = new AppSyncReport { OverallStatus = SyncStatus.Syncing };
+                    app.LastSyncReport = report;
                     var appBackupSourcePath = Path.Combine(backupRoot, app.Id);
                     report.AppBackupRootPath = appBackupSourcePath + Path.DirectorySeparatorChar; // Set for DetermineOverallStatus
-                    perAppStatusCallback?.Invoke(app, report);
+                    perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
 
                     bool skipSyncDeletionDueToEmptySource = false;
 
@@ -517,7 +519,7 @@ namespace BackupWarden.Services.Business
                         {
                             _logger.LogWarning("Critical problem with backup source for app {AppId} at {BackupPath} and no files found. Restore cannot proceed.", app.Id, appBackupSourcePath);
                             report.DetermineOverallStatus();
-                            perAppStatusCallback?.Invoke(app, report);
+                            perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
                             processedApps++;
                             progress?.Report((int)(processedApps / (double)totalApps * 100));
                             continue;
@@ -535,7 +537,7 @@ namespace BackupWarden.Services.Business
                                 skipSyncDeletionDueToEmptySource = true;
                             }
                             report.DetermineOverallStatus();
-                            perAppStatusCallback?.Invoke(app, report);
+                            perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
                             processedApps++;
                             progress?.Report((int)(processedApps / (double)totalApps * 100));
                             continue;
@@ -654,7 +656,8 @@ namespace BackupWarden.Services.Business
                                         bool toBePreserved = preserveLiveRelativePaths.Contains(liveRelativePath) ||
                                                              preserveLiveRelativePrefixes.Any(p => liveRelativePath.StartsWith(p, StringComparison.OrdinalIgnoreCase));
 
-                                        string originalPathSpecCorrelated = app.Paths.FirstOrDefault(ps => {
+                                        string originalPathSpecCorrelated = app.Paths.FirstOrDefault(ps =>
+                                        {
                                             if (string.IsNullOrWhiteSpace(ps)) return false;
                                             var expPs = SpecialFolderUtil.ExpandSpecialFolders(ps);
                                             if (string.IsNullOrWhiteSpace(expPs)) return false;
@@ -733,7 +736,7 @@ namespace BackupWarden.Services.Business
                     }
                     finally
                     {
-                        perAppStatusCallback?.Invoke(app, report);
+                        perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
                         processedApps++;
                         progress?.Report((int)(processedApps / (double)totalApps * 100));
                     }
@@ -741,7 +744,7 @@ namespace BackupWarden.Services.Business
             });
         }
 
-        
+
         private static string GetDriveLetterRelativePath(string fullPath)
         {
             var root = Path.GetPathRoot(fullPath);
