@@ -257,7 +257,7 @@ namespace BackupWarden.Models
             // If we reach here: no failures, not NotYetBackedUp, backup root exists,
             // no data differences, and no warning-level path issues.
             // This implies PathIssues and FileDifferences are both effectively empty of problems.
-            if (!PathIssues.Any() && !FileDifferences.Any())
+            if (PathIssues.Count == 0 && FileDifferences.Count == 0)
             {
                 OverallStatus = SyncStatus.InSync;
                 return;
@@ -272,7 +272,7 @@ namespace BackupWarden.Models
             var sb = new StringBuilder();
             sb.AppendLine($"Status: {OverallStatus.ToDisplayString()}");
 
-            if (PathIssues.Any())
+            if (PathIssues.Count != 0)
             {
                 var issuesBySource = PathIssues.GroupBy(i => i.Source);
                 foreach (var group in issuesBySource.OrderBy(g => g.Key))
@@ -284,7 +284,7 @@ namespace BackupWarden.Models
                         .OrderByDescending(x => x.Count)
                         .Take(maxDistinctTypesToShow)
                         .ToList();
-                    if (topPathIssues.Any())
+                    if (topPathIssues.Count != 0)
                     {
                         sb.Append(" (");
                         sb.Append(string.Join(", ", topPathIssues.Select(tpi => $"{tpi.Count} {tpi.Type.ToDisplayString()}")));
@@ -292,13 +292,13 @@ namespace BackupWarden.Models
                         {
                             sb.Append(", ...");
                         }
-                        sb.Append(")");
+                        sb.Append(')');
                     }
                     sb.AppendLine();
                 }
             }
 
-            if (FileDifferences.Any())
+            if (FileDifferences.Count != 0)
             {
                 sb.Append($"• File Differences: {FileDifferences.Count}");
                 var topFileDiffs = FileDifferences
@@ -307,7 +307,7 @@ namespace BackupWarden.Models
                     .OrderByDescending(x => x.Count)
                     .Take(maxDistinctTypesToShow)
                     .ToList();
-                if (topFileDiffs.Any())
+                if (topFileDiffs.Count != 0)
                 {
                     sb.Append(" (");
                     sb.Append(string.Join(", ", topFileDiffs.Select(tfd => $"{tfd.Count} {tfd.Type.ToDisplayString()}")));
@@ -315,7 +315,7 @@ namespace BackupWarden.Models
                     {
                         sb.Append(", ...");
                     }
-                    sb.Append(")");
+                    sb.Append(')');
                 }
                 sb.AppendLine();
             }
@@ -326,7 +326,7 @@ namespace BackupWarden.Models
         {
             var sb = new StringBuilder();
             sb.AppendLine($"Overall Status: {OverallStatus.ToDisplayString()}");
-            if (PathIssues.Any())
+            if (PathIssues.Count != 0)
             {
                 sb.AppendLine("Path Issues:");
                 foreach (var issue in PathIssues.OrderBy(i => i.Source).ThenBy(i => i.IssueType))
@@ -334,7 +334,7 @@ namespace BackupWarden.Models
                     sb.AppendLine($"  - {issue}");
                 }
             }
-            if (FileDifferences.Any())
+            if (FileDifferences.Count != 0)
             {
                 sb.AppendLine("File Differences:");
                 foreach (var diff in FileDifferences.OrderBy(d => d.DifferenceType).ThenBy(d => d.RelativePath))

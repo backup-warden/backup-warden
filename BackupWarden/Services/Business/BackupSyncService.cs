@@ -86,7 +86,7 @@ namespace BackupWarden.Services.Business
                     try
                     {
                         var filesInDir = Directory.EnumerateFiles(actualPath, "*", SearchOption.AllDirectories).ToList();
-                        if (!filesInDir.Any())
+                        if (filesInDir.Count == 0)
                         {
                             issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathIsEffectivelyEmpty, issueSource, $"Directory '{actualPath}' (from '{pathSpec}') is empty."));
                         }
@@ -153,7 +153,7 @@ namespace BackupWarden.Services.Business
                 }
             }
 
-            if (fileDetails.Any())
+            if (fileDetails.Count != 0)
             {
                 isEffectivelyEmptyOverall = false;
             }
@@ -191,7 +191,7 @@ namespace BackupWarden.Services.Business
                         report.PathIssues.AddRange(sourcePathIssues);
 
                         var (destFiles, destPathIssues, destIsEffectivelyEmpty) =
-                            GetPathContents(new[] { report.AppBackupRootPath },
+                            GetPathContents([report.AppBackupRootPath],
                                             filePath => Path.GetRelativePath(appDestPath, filePath),
                                             PathIssueSource.BackupLocation,
                                             appDestPath);
@@ -318,13 +318,13 @@ namespace BackupWarden.Services.Business
                             }
                         }
 
-                        if (sourceIsEffectivelyEmpty && !sourceFiles.Any())
+                        if (sourceIsEffectivelyEmpty && sourceFiles.Count == 0)
                         {
                             _logger.LogInformation("Source for app {AppId} is effectively empty or all specified source files have issues.", app.Id);
                             if (mode == SyncMode.Sync)
                             {
                                 string msg = $"SYNC mode: Source for app {app.Id} is empty. Destination at {appDest} will NOT be cleared.";
-                                _logger.LogWarning(msg);
+                                _logger.LogWarning("SYNC mode: Source for app {AppId} is empty. Destination at {AppDest} will NOT be cleared.", app.Id, appDest);
                                 report.PathIssues.Add(new PathIssue("N/A", appDest, PathIssueType.OperationPrevented, PathIssueSource.BackupLocation, msg));
                                 skipSyncDeletionDueToEmptySource = true;
                             }
@@ -365,8 +365,6 @@ namespace BackupWarden.Services.Business
                                 {
                                     await CopyFileAsync(appFileInfo.FullName, destBackupFile);
                                     File.SetLastWriteTimeUtc(destBackupFile, appFileInfo.LastWriteTimeUtc);
-                                    // After successful copy, update backupFileInfo for potential logging, though not strictly needed for diff logic here
-                                    // backupFileInfo = new FileInfo(destBackupFile); 
                                 }
                                 catch (Exception ex)
                                 {
@@ -402,7 +400,7 @@ namespace BackupWarden.Services.Business
                                 }
                             }
 
-                            var (destFilesForSync, destPathIssuesForSync, _) = GetPathContents(new[] { report.AppBackupRootPath }, filePath => Path.GetRelativePath(appDest, filePath), PathIssueSource.BackupLocation, appDest);
+                            var (destFilesForSync, destPathIssuesForSync, _) = GetPathContents([report.AppBackupRootPath], filePath => Path.GetRelativePath(appDest, filePath), PathIssueSource.BackupLocation, appDest);
                             report.PathIssues.AddRange(destPathIssuesForSync);
 
                             bool criticalDestPathIssueForSync = destPathIssuesForSync.Any(pi =>
@@ -503,7 +501,7 @@ namespace BackupWarden.Services.Business
                     try
                     {
                         var (backupFiles, backupPathIssues, backupIsEffectivelyEmpty) =
-                            GetPathContents(new[] { report.AppBackupRootPath },
+                            GetPathContents([report.AppBackupRootPath],
                                             filePath => Path.GetRelativePath(appBackupSourcePath, filePath),
                                             PathIssueSource.BackupLocation,
                                             appBackupSourcePath);
@@ -515,7 +513,7 @@ namespace BackupWarden.Services.Business
                             (pi.IssueType == PathIssueType.PathNotFound && pi.PathSpec == report.AppBackupRootPath) || // Main backup dir missing
                             pi.IssueType == PathIssueType.PathInaccessible);
 
-                        if (criticalBackupSourceIssue && !backupFiles.Any())
+                        if (criticalBackupSourceIssue && backupFiles.Count == 0)
                         {
                             _logger.LogWarning("Critical problem with backup source for app {AppId} at {BackupPath} and no files found. Restore cannot proceed.", app.Id, appBackupSourcePath);
                             report.DetermineOverallStatus();
@@ -525,14 +523,14 @@ namespace BackupWarden.Services.Business
                             continue;
                         }
 
-                        if (backupIsEffectivelyEmpty && !backupFiles.Any())
+                        if (backupIsEffectivelyEmpty && backupFiles.Count == 0)
                         {
                             _logger.LogInformation("Backup source for app {AppId} is effectively empty. Nothing to restore.", app.Id);
                             if (mode == SyncMode.Sync)
                             {
                                 string appPathsSummary = app.Paths.Count > 0 ? string.Join(", ", app.Paths.Take(2)) + (app.Paths.Count > 2 ? "..." : "") : "N/A";
                                 string msg = $"SYNC mode: Backup source for app {app.Id} is empty. Application files at '{appPathsSummary}' will NOT be cleared.";
-                                _logger.LogWarning(msg);
+                                _logger.LogWarning("SYNC mode: Backup source for app {AppId} is empty. Application files at '{AppPathsSummary}' will NOT be cleared.", app.Id, appPathsSummary);
                                 report.PathIssues.Add(new PathIssue(appPathsSummary, null, PathIssueType.OperationPrevented, PathIssueSource.Application, msg));
                                 skipSyncDeletionDueToEmptySource = true;
                             }
@@ -544,7 +542,7 @@ namespace BackupWarden.Services.Business
                         }
 
                         var restoredRelativePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        if (backupFiles.Any())
+                        if (backupFiles.Count != 0)
                         {
                             foreach (var (relativePath, fileInBackupInfo) in backupFiles) // fileInBackupInfo is from Backup
                             {
@@ -555,7 +553,7 @@ namespace BackupWarden.Services.Business
                                     if (string.IsNullOrWhiteSpace(appFileDestPath) || (!Path.IsPathRooted(appFileDestPath) && !appFileDestPath.Contains('%')))
                                     {
                                         string errMsg = $"Could not reliably expand restore destination path for backup item '{relativePath}'.";
-                                        _logger.LogWarning(errMsg + " AppId: {AppId}", app.Id);
+                                        _logger.LogWarning("Could not reliably expand restore destination path for backup item '{RelativePath}'. AppId: {AppId}", relativePath, app.Id);
                                         report.PathIssues.Add(new PathIssue(relativePath, null, PathIssueType.PathUnexpandable, PathIssueSource.Application, errMsg));
                                         report.FileDifferences.Add(new FileDifference(relativePath, FileDifferenceType.OperationFailed, errMsg, applicationFileInfo: null, backupFileInfo: fileInBackupInfo));
                                         continue;
@@ -713,7 +711,7 @@ namespace BackupWarden.Services.Business
                                     bool isLikelyDirectorySpec = pathSpecEntry.EndsWith(Path.DirectorySeparatorChar.ToString()) ||
                                                                pathSpecEntry.EndsWith(Path.AltDirectorySeparatorChar.ToString());
 
-                                    string pathToClean = isLikelyDirectorySpec ? expandedPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) : Path.GetDirectoryName(expandedPath);
+                                    string? pathToClean = isLikelyDirectorySpec ? expandedPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) : Path.GetDirectoryName(expandedPath);
 
                                     if (isLikelyDirectorySpec && Directory.Exists(pathToClean))
                                     {
@@ -753,7 +751,7 @@ namespace BackupWarden.Services.Business
                 return fullPath;
             }
             var driveLetter = root[0].ToString();
-            var rest = fullPath.Substring(root.Length);
+            var rest = fullPath[root.Length..];
             return Path.Combine(driveLetter, rest);
         }
 
@@ -764,7 +762,7 @@ namespace BackupWarden.Services.Business
             {
                 if (fullPath.StartsWith(@"\\") || fullPath.StartsWith(@"//"))
                 {
-                    var parts = fullPath.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
+                    var parts = fullPath.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
                     if (parts.Length >= 2)
                     {
                         return Path.Combine(parts);
