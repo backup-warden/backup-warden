@@ -40,6 +40,7 @@ namespace BackupWarden
                     services.AddSingleton<IAppSettingsService, AppSettingsService>();
                     services.AddSingleton<IYamlConfigService, YamlConfigService>();
                     services.AddSingleton<IBackupSyncService, BackupSyncService>();
+                    services.AddSingleton<IFileSystemOperations, FileSystemOperations>();
 
                     services.AddSingleton<IDialogService, DialogService>();
                     services.AddSingleton<IPickerService, PickerService>();
