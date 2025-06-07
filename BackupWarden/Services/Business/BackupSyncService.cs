@@ -9,6 +9,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using BackupWarden.Models.Extensions;
 
 namespace BackupWarden.Services.Business
 {
@@ -32,6 +33,89 @@ namespace BackupWarden.Services.Business
         public BackupSyncService(ILogger<BackupSyncService> logger)
         {
             _logger = logger;
+        }
+
+        private static void DetermineAppSyncReportOverallStatus(AppSyncReport report)
+        {
+            bool appSourceIsFatallyFlawed() => report.PathIssues.Any(pi =>
+                pi.Source == PathIssueSource.Application &&
+                ((pi.IssueType == PathIssueType.PathSpecNullOrEmpty && pi.PathSpec == "N/A") ||
+                 pi.IssueType == PathIssueType.PathUnexpandable ||
+                 pi.IssueType == PathIssueType.PathInaccessible));
+
+            bool hasOperationalFailures() =>
+                report.PathIssues.Any(pi => pi.IssueType == PathIssueType.OperationFailed) ||
+                report.FileDifferences.Any(fd => fd.DifferenceType == FileDifferenceType.OperationFailed);
+
+            bool isMissingBackupRoot() => report.PathIssues.Any(pi =>
+                pi.Source == PathIssueSource.BackupLocation &&
+                pi.IssueType == PathIssueType.PathNotFound &&
+                !string.IsNullOrEmpty(report.AppBackupRootPath) &&
+                pi.PathSpec == report.AppBackupRootPath);
+
+            bool hasDataDifferencesExcludingOnlyInApp() => report.FileDifferences.Any(fd =>
+                fd.DifferenceType == FileDifferenceType.OnlyInBackup ||
+                fd.DifferenceType == FileDifferenceType.ContentMismatch);
+
+            if (appSourceIsFatallyFlawed() || hasOperationalFailures())
+            {
+                report.OverallStatus = SyncStatus.Failed;
+                return;
+            }
+
+            bool appHasAnyConfiguredPaths = !report.PathIssues.Any(pi =>
+                pi.Source == PathIssueSource.Application &&
+                pi.IssueType == PathIssueType.PathSpecNullOrEmpty &&
+                pi.PathSpec == "N/A");
+
+            if (isMissingBackupRoot())
+            {
+                if (appHasAnyConfiguredPaths)
+                {
+                    bool onlyAppSourceFileDifferences = report.FileDifferences.All(fd => fd.DifferenceType == FileDifferenceType.OnlyInApplication);
+
+                    bool pathIssuesAreConsistent = report.PathIssues.All(pi =>
+                        (pi.Source == PathIssueSource.BackupLocation && pi.IssueType == PathIssueType.PathNotFound && pi.PathSpec == report.AppBackupRootPath) ||
+                        (pi.Source == PathIssueSource.Application));
+
+                    bool hasTheMissingBackupRootIssue = report.PathIssues.Any(pi => pi.Source == PathIssueSource.BackupLocation && pi.IssueType == PathIssueType.PathNotFound && pi.PathSpec == report.AppBackupRootPath);
+
+                    if (hasTheMissingBackupRootIssue && pathIssuesAreConsistent && onlyAppSourceFileDifferences)
+                    {
+                        report.OverallStatus = SyncStatus.NotYetBackedUp;
+                        return;
+                    }
+                }
+                report.OverallStatus = SyncStatus.Failed;
+                return;
+            }
+
+            if (hasDataDifferencesExcludingOnlyInApp() || report.FileDifferences.Any(fd => fd.DifferenceType == FileDifferenceType.OnlyInApplication))
+            {
+                report.OverallStatus = SyncStatus.OutOfSync;
+                return;
+            }
+
+            bool hasWarningPathIssues = report.PathIssues.Any(pi =>
+                pi.IssueType == PathIssueType.PathIsEffectivelyEmpty ||
+                (pi.IssueType == PathIssueType.PathNotFound && pi.Source == PathIssueSource.Application) ||
+                (pi.IssueType == PathIssueType.PathNotFound && pi.Source == PathIssueSource.BackupLocation) ||
+                pi.IssueType == PathIssueType.OperationPrevented ||
+                (pi.IssueType == PathIssueType.PathInaccessible && pi.Source == PathIssueSource.BackupLocation));
+
+            if (hasWarningPathIssues)
+            {
+                report.OverallStatus = SyncStatus.Warning;
+                return;
+            }
+
+            if (report.PathIssues.Count == 0 && report.FileDifferences.Count == 0)
+            {
+                report.OverallStatus = SyncStatus.InSync;
+                return;
+            }
+
+            report.OverallStatus = SyncStatus.Unknown;
         }
 
         private static bool AreFileTimesClose(DateTime t1, DateTime t2, TimeSpan? tolerance = null)
@@ -61,7 +145,7 @@ namespace BackupWarden.Services.Business
             {
                 if (string.IsNullOrWhiteSpace(pathSpec))
                 {
-                    issues.Add(new PathIssue(pathSpec ?? "NULL", null, PathIssueType.PathSpecNullOrEmpty, issueSource, "Path specification is null or whitespace."));
+                    issues.Add(new PathIssue(pathSpec ?? "N/A", null, PathIssueType.PathSpecNullOrEmpty, issueSource, "Path specification is null or whitespace."));
                     continue;
                 }
 
@@ -120,7 +204,7 @@ namespace BackupWarden.Services.Business
                         issues.Add(new PathIssue(pathSpec, actualPath, PathIssueType.PathInaccessible, issueSource, $"Error enumerating directory '{actualPath}' (from '{pathSpec}'). Error: {ex.Message}"));
                     }
                 }
-                else // File
+                else
                 {
                     if (!File.Exists(actualPath))
                     {
@@ -184,7 +268,7 @@ namespace BackupWarden.Services.Business
                     var report = new AppSyncReport();
                     app.LastSyncReport = report;
                     var appDestPath = Path.Combine(backupRoot, app.Id);
-                    report.AppBackupRootPath = appDestPath + Path.DirectorySeparatorChar; // Set for DetermineOverallStatus
+                    report.AppBackupRootPath = appDestPath + Path.DirectorySeparatorChar;
 
                     try
                     {
@@ -205,17 +289,16 @@ namespace BackupWarden.Services.Business
                             pi.IssueType == PathIssueType.PathInaccessible);
 
                         bool backupLocationIssue = destPathIssues.Any(pi =>
-                            pi.PathSpec == report.AppBackupRootPath && // Check issue for the main app backup directory
+                            pi.PathSpec == report.AppBackupRootPath &&
                             (pi.IssueType == PathIssueType.PathUnexpandable || pi.IssueType == PathIssueType.PathInaccessible));
-                        // PathNotFound for AppBackupRootPath is handled by NotYetBackedUp status
 
                         bool canCompare = !appSourcePathIssue && !backupLocationIssue;
 
                         if (canCompare)
                         {
-                            foreach (var (relativePath, appFileInfo) in sourceFiles) // appFileInfo is from Application
+                            foreach (var (relativePath, appFileInfo) in sourceFiles)
                             {
-                                if (destFiles.TryGetValue(relativePath, out var backupFileInfo)) // backupFileInfo is from Backup
+                                if (destFiles.TryGetValue(relativePath, out var backupFileInfo))
                                 {
                                     if (appFileInfo.Length != backupFileInfo.Length || !AreFileTimesClose(appFileInfo.LastWriteTimeUtc, backupFileInfo.LastWriteTimeUtc))
                                     {
@@ -231,7 +314,7 @@ namespace BackupWarden.Services.Business
                                 }
                             }
 
-                            foreach (var (relativePath, backupFileInfo) in destFiles) // backupFileInfo is from Backup
+                            foreach (var (relativePath, backupFileInfo) in destFiles)
                             {
                                 if (!sourceFiles.ContainsKey(relativePath))
                                 {
@@ -241,8 +324,8 @@ namespace BackupWarden.Services.Business
                             }
                         }
 
-                        report.DetermineOverallStatus();
-                        perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
+                        DetermineAppSyncReportOverallStatus(report);
+                        perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryReport(), report.ToDetailedReport());
                     }
                     catch (Exception ex)
                     {
@@ -251,7 +334,7 @@ namespace BackupWarden.Services.Business
                         report.PathIssues.Add(new PathIssue("N/A", null, PathIssueType.OperationFailed, PathIssueSource.Operation, $"Operation failed due to critical error: {ex.Message}"));
                         if (app != null)
                         {
-                            perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
+                            perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryReport(), report.ToDetailedReport());
                         }
                     }
                 }
@@ -279,8 +362,8 @@ namespace BackupWarden.Services.Business
                     var report = new AppSyncReport { OverallStatus = SyncStatus.Syncing };
                     app.LastSyncReport = report;
                     var appDest = Path.Combine(backupRoot, app.Id);
-                    report.AppBackupRootPath = appDest + Path.DirectorySeparatorChar; // Set for DetermineOverallStatus
-                    perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
+                    report.AppBackupRootPath = appDest + Path.DirectorySeparatorChar;
+                    perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryReport(), report.ToDetailedReport());
 
                     bool skipSyncDeletionDueToEmptySource = false;
 
@@ -298,8 +381,8 @@ namespace BackupWarden.Services.Business
                         if (criticalSourceIssue)
                         {
                             _logger.LogWarning("Critical source path problem for app {AppId}. Backup cannot proceed.", app.Id);
-                            report.DetermineOverallStatus();
-                            perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
+                            DetermineAppSyncReportOverallStatus(report);
+                            perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryReport(), report.ToDetailedReport());
                             processedApps++;
                             progress?.Report((int)(processedApps / (double)totalApps * 100));
                             continue;
@@ -312,8 +395,8 @@ namespace BackupWarden.Services.Business
                             {
                                 report.PathIssues.Add(new PathIssue(appDest, appDest, PathIssueType.PathInaccessible, PathIssueSource.BackupLocation, $"Failed to create backup destination directory: {ex.Message}"));
                                 _logger.LogError(ex, "Failed to create backup destination directory for app {AppId}", app.Id);
-                                report.DetermineOverallStatus();
-                                perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
+                                DetermineAppSyncReportOverallStatus(report);
+                                perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryReport(), report.ToDetailedReport());
                                 processedApps++;
                                 progress?.Report((int)(processedApps / (double)totalApps * 100));
                                 continue;
@@ -330,15 +413,15 @@ namespace BackupWarden.Services.Business
                                 report.PathIssues.Add(new PathIssue("N/A", appDest, PathIssueType.OperationPrevented, PathIssueSource.BackupLocation, msg));
                                 skipSyncDeletionDueToEmptySource = true;
                             }
-                            report.DetermineOverallStatus();
-                            perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
+                            DetermineAppSyncReportOverallStatus(report);
+                            perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryReport(), report.ToDetailedReport());
                             processedApps++;
                             progress?.Report((int)(processedApps / (double)totalApps * 100));
                             continue;
                         }
 
                         var backedUpRelativePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        foreach (var (relativePath, appFileInfo) in sourceFiles) // appFileInfo is from Application
+                        foreach (var (relativePath, appFileInfo) in sourceFiles)
                         {
                             var destBackupFile = Path.Combine(appDest, relativePath);
                             try
@@ -351,7 +434,7 @@ namespace BackupWarden.Services.Business
                             }
                             catch (Exception ex)
                             {
-                                report.PathIssues.Add(new PathIssue(Path.GetDirectoryName(destBackupFile), Path.GetDirectoryName(destBackupFile), PathIssueType.PathInaccessible, PathIssueSource.BackupLocation, $"Cannot create directory for '{destBackupFile}': {ex.Message}"));
+                                report.PathIssues.Add(new PathIssue(Path.GetDirectoryName(destBackupFile) ?? "N/A", Path.GetDirectoryName(destBackupFile), PathIssueType.PathInaccessible, PathIssueSource.BackupLocation, $"Cannot create directory for '{destBackupFile}': {ex.Message}"));
                                 _logger.LogError(ex, "Cannot create directory for {DestFile} in app {AppId}", destBackupFile, app.Id);
                                 report.FileDifferences.Add(new FileDifference(relativePath, FileDifferenceType.OperationFailed, $"Failed to create directory for backup file: {ex.Message}", applicationFileInfo: appFileInfo, backupFileInfo: null));
                                 continue;
@@ -417,9 +500,9 @@ namespace BackupWarden.Services.Business
                             }
                             else
                             {
-                                foreach (var (relativeDestPath, currentBackupFileInfo) in destFilesForSync) // currentBackupFileInfo is from Backup
+                                foreach (var (relativeDestPath, currentBackupFileInfo) in destFilesForSync)
                                 {
-                                    if (!backedUpRelativePaths.Contains(relativeDestPath)) // Not in application source or failed to copy from app
+                                    if (!backedUpRelativePaths.Contains(relativeDestPath))
                                     {
                                         bool toBePreserved = protectedDeletionRelativePaths.Contains(relativeDestPath) ||
                                                              protectedDeletionRelativePrefixes.Any(p => relativeDestPath.StartsWith(p, StringComparison.OrdinalIgnoreCase));
@@ -430,7 +513,7 @@ namespace BackupWarden.Services.Business
                                             _logger.LogInformation("SYNC Backup: Preserving backup item {DestFileFullPath} (corresponds to source PathSpec '{OriginalPathSpec}') as its source was missing or empty.", currentBackupFileInfo.FullName, originalPathSpec);
                                             report.FileDifferences.Add(new FileDifference(
                                                 relativeDestPath,
-                                                FileDifferenceType.OnlyInBackup, // It's only in backup and we are keeping it
+                                                FileDifferenceType.OnlyInBackup,
                                                 $"Preserved in backup (SYNC mode). Corresponding application item (PathSpec: {originalPathSpec}) was missing, or source directory was empty/missing.",
                                                 applicationFileInfo: null, backupFileInfo: currentBackupFileInfo
                                             ));
@@ -456,7 +539,7 @@ namespace BackupWarden.Services.Business
                         {
                             _logger.LogInformation("SYNC Backup: Deletion from backup destination for app {AppId} was skipped because source was empty.", app.Id);
                         }
-                        report.DetermineOverallStatus();
+                        DetermineAppSyncReportOverallStatus(report);
                     }
                     catch (Exception ex)
                     {
@@ -466,7 +549,7 @@ namespace BackupWarden.Services.Business
                     }
                     finally
                     {
-                        perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
+                        perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryReport(), report.ToDetailedReport());
                         processedApps++;
                         progress?.Report((int)(processedApps / (double)totalApps * 100));
                     }
@@ -495,31 +578,31 @@ namespace BackupWarden.Services.Business
                     var report = new AppSyncReport { OverallStatus = SyncStatus.Syncing };
                     app.LastSyncReport = report;
                     var appBackupSourcePath = Path.Combine(backupRoot, app.Id);
-                    report.AppBackupRootPath = appBackupSourcePath + Path.DirectorySeparatorChar; // Set for DetermineOverallStatus
-                    perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
+                    report.AppBackupRootPath = appBackupSourcePath + Path.DirectorySeparatorChar;
+                    perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryReport(), report.ToDetailedReport());
 
                     bool skipSyncDeletionDueToEmptySource = false;
 
                     try
                     {
                         var (backupFiles, backupPathIssues, backupIsEffectivelyEmpty) =
-                            GetPathContents([report.AppBackupRootPath],
+                            GetPathContents(new[] { report.AppBackupRootPath },
                                             filePath => Path.GetRelativePath(appBackupSourcePath, filePath),
                                             PathIssueSource.BackupLocation,
                                             appBackupSourcePath);
                         report.PathIssues.AddRange(backupPathIssues);
 
                         bool criticalBackupSourceIssue = backupPathIssues.Any(pi =>
-                            pi.IssueType == PathIssueType.PathSpecNullOrEmpty || // Should not happen for the single pathspec here
-                            pi.IssueType == PathIssueType.PathUnexpandable || // Should not happen for a combined path
-                            (pi.IssueType == PathIssueType.PathNotFound && pi.PathSpec == report.AppBackupRootPath) || // Main backup dir missing
+                            pi.IssueType == PathIssueType.PathSpecNullOrEmpty ||
+                            pi.IssueType == PathIssueType.PathUnexpandable ||
+                            (pi.IssueType == PathIssueType.PathNotFound && pi.PathSpec == report.AppBackupRootPath) ||
                             pi.IssueType == PathIssueType.PathInaccessible);
 
                         if (criticalBackupSourceIssue && backupFiles.Count == 0)
                         {
                             _logger.LogWarning("Critical problem with backup source for app {AppId} at {BackupPath} and no files found. Restore cannot proceed.", app.Id, appBackupSourcePath);
-                            report.DetermineOverallStatus();
-                            perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
+                            DetermineAppSyncReportOverallStatus(report);
+                            perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryReport(), report.ToDetailedReport());
                             processedApps++;
                             progress?.Report((int)(processedApps / (double)totalApps * 100));
                             continue;
@@ -536,8 +619,8 @@ namespace BackupWarden.Services.Business
                                 report.PathIssues.Add(new PathIssue(appPathsSummary, null, PathIssueType.OperationPrevented, PathIssueSource.Application, msg));
                                 skipSyncDeletionDueToEmptySource = true;
                             }
-                            report.DetermineOverallStatus();
-                            perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
+                            DetermineAppSyncReportOverallStatus(report);
+                            perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryReport(), report.ToDetailedReport());
                             processedApps++;
                             progress?.Report((int)(processedApps / (double)totalApps * 100));
                             continue;
@@ -546,9 +629,9 @@ namespace BackupWarden.Services.Business
                         var restoredRelativePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                         if (backupFiles.Count != 0)
                         {
-                            foreach (var (relativePath, fileInBackupInfo) in backupFiles) // fileInBackupInfo is from Backup
+                            foreach (var (relativePath, fileInBackupInfo) in backupFiles)
                             {
-                                string? appFileDestPath = null; // This is the destination in the application
+                                string? appFileDestPath = null;
                                 try
                                 {
                                     appFileDestPath = SpecialFolderUtil.ExpandSpecialFolders(relativePath);
@@ -576,7 +659,7 @@ namespace BackupWarden.Services.Business
                                     continue;
                                 }
 
-                                var currentAppFileInfo = File.Exists(appFileDestPath) ? new FileInfo(appFileDestPath) : null; // currentAppFileInfo is from Application
+                                var currentAppFileInfo = File.Exists(appFileDestPath) ? new FileInfo(appFileDestPath) : null;
 
                                 if (currentAppFileInfo == null ||
                                     fileInBackupInfo.Length != currentAppFileInfo.Length ||
@@ -649,9 +732,9 @@ namespace BackupWarden.Services.Business
                             }
                             else
                             {
-                                foreach (var (liveRelativePath, liveAppFileInfo) in currentAppFiles) // liveAppFileInfo is from Application
+                                foreach (var (liveRelativePath, liveAppFileInfo) in currentAppFiles)
                                 {
-                                    if (!restoredRelativePaths.Contains(liveRelativePath)) // Not restored from backup
+                                    if (!restoredRelativePaths.Contains(liveRelativePath))
                                     {
                                         bool toBePreserved = preserveLiveRelativePaths.Contains(liveRelativePath) ||
                                                              preserveLiveRelativePrefixes.Any(p => liveRelativePath.StartsWith(p, StringComparison.OrdinalIgnoreCase));
@@ -676,7 +759,7 @@ namespace BackupWarden.Services.Business
                                             _logger.LogInformation("SYNC Restore: Preserving application file {AppFileFullPath} (tokenized path '{LiveRelativePath}', related to AppConfig.Path '{OriginalPathSpec}') as its item was missing/empty in backup.", liveAppFileInfo.FullName, liveRelativePath, originalPathSpecCorrelated);
                                             report.FileDifferences.Add(new FileDifference(
                                                 liveRelativePath,
-                                                FileDifferenceType.OnlyInApplication, // It's only in app and we are keeping it
+                                                FileDifferenceType.OnlyInApplication,
                                                 $"Preserved in application (SYNC mode). Corresponding backup item for '{originalPathSpecCorrelated}' was missing or backup directory empty.",
                                                 applicationFileInfo: liveAppFileInfo, backupFileInfo: null
                                             ));
@@ -686,7 +769,7 @@ namespace BackupWarden.Services.Business
                                         bool restoreAttemptedAndFailed = report.FileDifferences.Any(fd =>
                                             fd.RelativePath == liveRelativePath &&
                                             fd.DifferenceType == FileDifferenceType.OperationFailed &&
-                                            fd.BackupFileInfo != null); // Check BackupFileInfo to ensure it was a failed restore from backup
+                                            fd.BackupFileInfo != null);
 
                                         if (!restoreAttemptedAndFailed)
                                         {
@@ -726,7 +809,7 @@ namespace BackupWarden.Services.Business
                         {
                             _logger.LogInformation("SYNC Restore: Deletion from app location for app {AppId} was skipped because backup source was empty.", app.Id);
                         }
-                        report.DetermineOverallStatus();
+                        DetermineAppSyncReportOverallStatus(report);
                     }
                     catch (Exception ex)
                     {
@@ -736,14 +819,13 @@ namespace BackupWarden.Services.Business
                     }
                     finally
                     {
-                        perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryString(), report.ToString());
+                        perAppStatusCallback?.Invoke(app, report.OverallStatus, report.ToSummaryReport(), report.ToDetailedReport());
                         processedApps++;
                         progress?.Report((int)(processedApps / (double)totalApps * 100));
                     }
                 }
             });
         }
-
 
         private static string GetDriveLetterRelativePath(string fullPath)
         {
