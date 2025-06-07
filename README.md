@@ -25,3 +25,4 @@
 - [ ] Show summary of Sync status
 - [ ] Show popup with report of Sync status
 - [ ] Try to Refactor BackupSyncService to be more readable and maintainable
+- [ ] Issue not update the Summary at the end with success or fail
