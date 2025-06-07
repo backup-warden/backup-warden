@@ -31,14 +31,14 @@ namespace BackupWarden.ViewModels
         }
 
 
-        private string? _destinationFolder;
+        private string? _backupFolder;
 
-        public string? DestinationFolder
+        public string? BackupFolder
         {
-            get => _destinationFolder;
+            get => _backupFolder;
             set
             {
-                SetProperty(ref _destinationFolder, value);
+                SetProperty(ref _backupFolder, value);
             }
         }
 
@@ -83,7 +83,7 @@ namespace BackupWarden.ViewModels
 
         public IAsyncRelayCommand AddYamlFileCommand { get; }
         public IAsyncRelayCommand BackupCommand { get; }
-        public IAsyncRelayCommand BrowseDestinationFolderCommand { get; }
+        public IAsyncRelayCommand BrowseBackupFolderCommand { get; }
         public IRelayCommand<string> RemoveYamlFileCommand { get; }
         public IAsyncRelayCommand RestoreCommand { get; }
         public IAsyncRelayCommand RefreshSyncStatusCommand { get; }
@@ -113,7 +113,7 @@ namespace BackupWarden.ViewModels
 
             AddYamlFileCommand = new AsyncRelayCommand(AddYamlFileAsync, CanModifySettings);
             RemoveYamlFileCommand = new RelayCommand<string?>(RemoveYamlFile, (_) => CanModifySettings());
-            BrowseDestinationFolderCommand = new AsyncRelayCommand(BrowseDestinationFolderAsync, CanModifySettings);
+            BrowseBackupFolderCommand = new AsyncRelayCommand(BrowseBackupFolderAsync, CanModifySettings);
             BackupCommand = new AsyncRelayCommand(BackupAsync, CanBackup);
             RestoreCommand = new AsyncRelayCommand(RestoreAsync, CanRestore);
             RefreshSyncStatusCommand = new AsyncRelayCommand(CheckAppsSyncStatusAsync, CanModifySettings);
@@ -126,7 +126,7 @@ namespace BackupWarden.ViewModels
 
         private void LoadAppSettings()
         {
-            DestinationFolder = _appSettingsService.LoadDestinationFolder();
+            BackupFolder = _appSettingsService.LoadBackupFolder();
             foreach (var path in _appSettingsService.LoadYamlFilePaths())
             {
                 YamlFilePaths.Add(path);
@@ -160,7 +160,7 @@ namespace BackupWarden.ViewModels
 
             PropertyChanged += (s, e) =>
             {
-                if (e.PropertyName is nameof(DestinationFolder))
+                if (e.PropertyName is nameof(BackupFolder))
                 {
                     BackupCommand.NotifyCanExecuteChanged();
                     RestoreCommand.NotifyCanExecuteChanged();
@@ -173,7 +173,7 @@ namespace BackupWarden.ViewModels
                         BackupCommand.NotifyCanExecuteChanged();
                         RestoreCommand.NotifyCanExecuteChanged();
                         AddYamlFileCommand.NotifyCanExecuteChanged();
-                        BrowseDestinationFolderCommand.NotifyCanExecuteChanged();
+                        BrowseBackupFolderCommand.NotifyCanExecuteChanged();
                         RemoveYamlFileCommand.NotifyCanExecuteChanged();
                         RefreshSyncStatusCommand.NotifyCanExecuteChanged();
                     }
@@ -183,7 +183,7 @@ namespace BackupWarden.ViewModels
 
         private bool CanBackup()
         {
-            return !IsRunning && SelectedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
+            return !IsRunning && SelectedApps.Count > 0 && !string.IsNullOrWhiteSpace(BackupFolder);
         }
 
         private bool CanModifySettings()
@@ -193,12 +193,12 @@ namespace BackupWarden.ViewModels
 
         private bool CanRestore()
         {
-            return !IsRunning && SelectedApps.Count > 0 && !string.IsNullOrWhiteSpace(DestinationFolder);
+            return !IsRunning && SelectedApps.Count > 0 && !string.IsNullOrWhiteSpace(BackupFolder);
         }
 
         private async Task CheckAppsSyncStatusAsync()
         {
-            if (string.IsNullOrWhiteSpace(DestinationFolder))
+            if (string.IsNullOrWhiteSpace(BackupFolder))
             {
                 return;
             }
@@ -207,7 +207,7 @@ namespace BackupWarden.ViewModels
                 IsRunning = true;
                 IsCheckingSyncStatus = true;
                 UpdateSyncStatusToUnknown(LoadedApps);
-                await _backupSyncService.UpdateSyncStatusAsync(LoadedApps, DestinationFolder, _syncStatusDispatcher.Invoke);
+                await _backupSyncService.UpdateSyncStatusAsync(LoadedApps, BackupFolder, _syncStatusDispatcher.Invoke);
             }
             catch (Exception ex)
             {
@@ -246,21 +246,21 @@ namespace BackupWarden.ViewModels
             }
         }
 
-        private async Task BrowseDestinationFolderAsync()
+        private async Task BrowseBackupFolderAsync()
         {
             try
             {
                 var folder = await _pickerService.PickFolderAsync();
                 if (folder is not null)
                 {
-                    DestinationFolder = folder;
-                    _appSettingsService.SaveDestinationFolder(folder);
+                    BackupFolder = folder;
+                    _appSettingsService.SaveBackupFolder(folder);
                     _ = CheckAppsSyncStatusAsync();
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occurred while browsing for a destination folder.");
+                _logger.LogError(ex, "An error occurred while browsing for a backup folder.");
                 await _dialogService.ShowErrorAsync("An error occurred. Please check the logs for details.");
             }
         }
@@ -284,7 +284,7 @@ namespace BackupWarden.ViewModels
                 UpdateSyncStatusToUnknown(SelectedApps);
                 await _backupSyncService.BackupAsync(
                     SelectedApps,
-                    DestinationFolder!,
+                    BackupFolder!,
                     SelectedSyncMode,
                     _progressReporter, _syncStatusDispatcher.Invoke);
             }
@@ -310,7 +310,7 @@ namespace BackupWarden.ViewModels
                 UpdateSyncStatusToUnknown(SelectedApps);
                 await _backupSyncService.RestoreAsync(
                     SelectedApps,
-                    DestinationFolder!,
+                    BackupFolder!,
                     SelectedSyncMode,
                     _progressReporter, _syncStatusDispatcher.Invoke);
             }

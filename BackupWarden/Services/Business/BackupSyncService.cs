@@ -15,9 +15,9 @@ namespace BackupWarden.Services.Business
 {
     public interface IBackupSyncService
     {
-        Task UpdateSyncStatusAsync(IEnumerable<AppConfig> apps, string destinationRoot, Action<AppConfig, AppSyncReport>? perAppStatusCallback = null);
-        Task RestoreAsync(IEnumerable<AppConfig> configs, string destinationRoot, SyncMode mode, IProgress<int>? progress = null, Action<AppConfig, AppSyncReport>? perAppStatusCallback = null);
-        Task BackupAsync(IEnumerable<AppConfig> configs, string destinationRoot, SyncMode mode, IProgress<int>? progress = null, Action<AppConfig, AppSyncReport>? perAppStatusCallback = null);
+        Task UpdateSyncStatusAsync(IEnumerable<AppConfig> apps, string backupRoot, Action<AppConfig, AppSyncReport>? perAppStatusCallback = null);
+        Task RestoreAsync(IEnumerable<AppConfig> configs, string backupRoot, SyncMode mode, IProgress<int>? progress = null, Action<AppConfig, AppSyncReport>? perAppStatusCallback = null);
+        Task BackupAsync(IEnumerable<AppConfig> configs, string backupRoot, SyncMode mode, IProgress<int>? progress = null, Action<AppConfig, AppSyncReport>? perAppStatusCallback = null);
     }
 
     public class BackupSyncService : IBackupSyncService
@@ -171,7 +171,7 @@ namespace BackupWarden.Services.Business
 
         public async Task UpdateSyncStatusAsync(
             IEnumerable<AppConfig> apps,
-            string destinationRoot,
+            string backupRoot,
             Action<AppConfig, AppSyncReport>? perAppStatusCallback = null)
         {
             await Task.Run(() =>
@@ -186,7 +186,7 @@ namespace BackupWarden.Services.Business
                             GetPathContents(app.Paths, GetSpecialFolderRelativePath);
                         report.PathIssues.AddRange(sourcePathIssues);
 
-                        var appDestPath = Path.Combine(destinationRoot, app.Id);
+                        var appDestPath = Path.Combine(backupRoot, app.Id);
 
                         var (destFiles, destPathIssues, destIsEffectivelyEmpty) =
                             GetPathContents(new[] { appDestPath + Path.DirectorySeparatorChar },
@@ -250,7 +250,7 @@ namespace BackupWarden.Services.Business
 
         public async Task BackupAsync(
             IEnumerable<AppConfig> configs,
-            string destinationRoot,
+            string backupRoot,
             SyncMode mode,
             IProgress<int>? progress = null,
             Action<AppConfig, AppSyncReport>? perAppStatusCallback = null)
@@ -269,7 +269,7 @@ namespace BackupWarden.Services.Business
                     var report = new AppSyncReport { OverallStatus = SyncStatus.Syncing };
                     perAppStatusCallback?.Invoke(app, report);
 
-                    var appDest = Path.Combine(destinationRoot, app.Id);
+                    var appDest = Path.Combine(backupRoot, app.Id);
                     bool skipSyncDeletionDueToEmptySource = false;
 
                     try
@@ -467,7 +467,7 @@ namespace BackupWarden.Services.Business
 
         public async Task RestoreAsync(
             IEnumerable<AppConfig> configs,
-            string destinationRoot,
+            string backupRoot,
             SyncMode mode,
             IProgress<int>? progress = null,
             Action<AppConfig, AppSyncReport>? perAppStatusCallback = null)
@@ -486,7 +486,7 @@ namespace BackupWarden.Services.Business
                     var report = new AppSyncReport { OverallStatus = SyncStatus.Syncing };
                     perAppStatusCallback?.Invoke(app, report);
 
-                    var backupSourcePathForApp = Path.Combine(destinationRoot, app.Id);
+                    var backupSourcePathForApp = Path.Combine(backupRoot, app.Id);
                     bool skipSyncDeletionDueToEmptySource = false;
 
                     try

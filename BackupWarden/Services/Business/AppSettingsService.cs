@@ -9,14 +9,14 @@ namespace BackupWarden.Services.Business
     {
         void SaveYamlFilePaths(IEnumerable<string> paths);
         List<string> LoadYamlFilePaths();
-        void SaveDestinationFolder(string path);
-        string? LoadDestinationFolder();
+        void SaveBackupFolder(string path);
+        string? LoadBackupFolder();
     }
 
     public class AppSettingsService : IAppSettingsService
     {
         private const string YamlFilesKey = "YamlFilePaths";
-        private const string DestinationFolderKey = "DestinationFolder";
+        private const string BackupFolderKey = "BackupFolder";
 
         public void SaveYamlFilePaths(IEnumerable<string> paths)
         {
@@ -33,14 +33,14 @@ namespace BackupWarden.Services.Business
             return [];
         }
 
-        public void SaveDestinationFolder(string path)
+        public void SaveBackupFolder(string path)
         {
-            ApplicationData.Current.LocalSettings.Values[DestinationFolderKey] = path;
+            ApplicationData.Current.LocalSettings.Values[BackupFolderKey] = path;
         }
 
-        public string? LoadDestinationFolder()
+        public string? LoadBackupFolder()
         {
-            if (ApplicationData.Current.LocalSettings.Values.TryGetValue(DestinationFolderKey, out var value) && value is string path)
+            if (ApplicationData.Current.LocalSettings.Values.TryGetValue(BackupFolderKey, out var value) && value is string path)
             {
                 return path;
             }
