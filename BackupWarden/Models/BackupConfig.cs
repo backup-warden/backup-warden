@@ -21,7 +21,8 @@ namespace BackupWarden.Models
         OutOfSync,          // Backup does not accurately reflect the source application paths (e.g., source has newer/different files, or backup has files not in source).
         Syncing,            // A backup or restore operation is in progress.
         Failed,             // The last operation failed.
-        Warning             // The operation completed, but there are non-critical issues or warnings to review in the report (e.g., empty paths, inaccessible items that were skipped).
+        Warning,            // The operation completed, but there are non-critical issues or warnings to review in the report (e.g., empty paths, inaccessible items that were skipped).
+        NotYetBackedUp      // The application has configured paths, but no backup has been performed yet.
     }
 
     public enum PathIssueType
@@ -37,10 +38,10 @@ namespace BackupWarden.Models
 
     public enum FileDifferenceType
     {
-        SourceOnly,                 // File exists in source, not in destination
-        DestinationOnly,            // File exists in destination, not in source
-        ContentMismatch,            // File exists in both, but size or timestamp differs
-        OperationFailed             // An operation on this file failed (e.g. copy, delete)
+        OnlyInApplication,      // File exists only in the application's paths, not in the backup.
+        OnlyInBackup,           // File exists only in the backup, not in the application's paths.
+        ContentMismatch,        // File exists in both, but size or timestamp differs.
+        OperationFailed         // An operation on this file failed (e.g. copy, delete).
     }
 
     public enum PathIssueSource
@@ -67,6 +68,7 @@ namespace BackupWarden.Models
             SyncStatus.Syncing => "Syncing in Progress",
             SyncStatus.Failed => "Operation Failed",
             SyncStatus.Warning => "Completed with Warnings",
+            SyncStatus.NotYetBackedUp => "Not Yet Backed Up",
             _ => status.ToString()
         };
 
@@ -84,8 +86,8 @@ namespace BackupWarden.Models
 
         public static string ToDisplayString(this FileDifferenceType diffType) => diffType switch
         {
-            FileDifferenceType.SourceOnly => "Only in Source",
-            FileDifferenceType.DestinationOnly => "Only in Destination",
+            FileDifferenceType.OnlyInApplication => "Only in App",
+            FileDifferenceType.OnlyInBackup => "Only in Backup",
             FileDifferenceType.ContentMismatch => "Content Mismatch",
             FileDifferenceType.OperationFailed => "Operation Failed on File",
             _ => diffType.ToString()
@@ -130,18 +132,26 @@ namespace BackupWarden.Models
                     displayDescription = displayDescription.Replace(quotedMainPath, "(this path)");
                 }
             }
-            // Include the source of the issue
             return $"[{Source.ToDisplayString()} - {IssueType.ToDisplayString()}] {mainPathToDisplay}: {displayDescription}";
         }
     }
 
-    public class FileDifference(string relativePath, FileDifferenceType differenceType, string description, FileInfo? sourceFileInfo = null, FileInfo? destinationFileInfo = null)
+    public class FileDifference
     {
-        public string RelativePath { get; } = relativePath;
-        public FileDifferenceType DifferenceType { get; } = differenceType;
-        public FileInfo? SourceFileInfo { get; } = sourceFileInfo;
-        public FileInfo? DestinationFileInfo { get; } = destinationFileInfo;
-        public string Description { get; } = description;
+        public string RelativePath { get; }
+        public FileDifferenceType DifferenceType { get; }
+        public FileInfo? ApplicationFileInfo { get; }
+        public FileInfo? BackupFileInfo { get; }
+        public string Description { get; }
+
+        public FileDifference(string relativePath, FileDifferenceType differenceType, string description, FileInfo? applicationFileInfo = null, FileInfo? backupFileInfo = null)
+        {
+            RelativePath = relativePath;
+            DifferenceType = differenceType;
+            Description = description;
+            ApplicationFileInfo = applicationFileInfo;
+            BackupFileInfo = backupFileInfo;
+        }
 
         public override string ToString() => $"[{DifferenceType.ToDisplayString()}] {RelativePath}: {Description}";
     }
@@ -151,12 +161,16 @@ namespace BackupWarden.Models
         public List<PathIssue> PathIssues { get; } = [];
         public List<FileDifference> FileDifferences { get; } = [];
         public SyncStatus OverallStatus { get; set; } = SyncStatus.Unknown;
+        public string AppBackupRootPath { get; internal set; } = string.Empty;
 
         public bool HasCriticalPathIssues => PathIssues.Any(pi =>
-            pi.IssueType == PathIssueType.PathSpecNullOrEmpty ||
-            pi.IssueType == PathIssueType.PathUnexpandable ||
-            pi.IssueType == PathIssueType.PathInaccessible ||
-            pi.IssueType == PathIssueType.OperationFailed);
+            (pi.Source == PathIssueSource.Application && (
+                pi.IssueType == PathIssueType.PathSpecNullOrEmpty ||
+                pi.IssueType == PathIssueType.PathUnexpandable ||
+                pi.IssueType == PathIssueType.PathInaccessible
+            )) ||
+            (pi.IssueType == PathIssueType.PathNotFound && pi.Source == PathIssueSource.BackupLocation && !string.IsNullOrEmpty(AppBackupRootPath) && pi.PathSpec == AppBackupRootPath) || // Main backup dir missing is critical unless it's a NotYetBackedUp scenario
+            pi.IssueType == PathIssueType.OperationFailed); // General operation failures
 
         public bool HasFileOperationFailures => FileDifferences.Any(fd => fd.DifferenceType == FileDifferenceType.OperationFailed);
 
@@ -164,12 +178,45 @@ namespace BackupWarden.Models
 
         public bool HasWarningsOrPreventedOperations => PathIssues.Any(pi =>
             pi.IssueType == PathIssueType.PathIsEffectivelyEmpty ||
-            pi.IssueType == PathIssueType.PathNotFound ||
-            pi.IssueType == PathIssueType.OperationPrevented);
+            // PathNotFound is a warning if it's not the main AppBackupRootPath (which would be critical or NotYetBackedUp)
+            (pi.IssueType == PathIssueType.PathNotFound && !(pi.Source == PathIssueSource.BackupLocation && !string.IsNullOrEmpty(AppBackupRootPath) && pi.PathSpec == AppBackupRootPath)) ||
+            pi.IssueType == PathIssueType.OperationPrevented ||
+            (pi.IssueType == PathIssueType.PathInaccessible && pi.Source == PathIssueSource.BackupLocation)); // Inaccessible backup sub-paths are warnings
+
 
         public void DetermineOverallStatus()
         {
-            if (HasCriticalPathIssues || HasFileOperationFailures)
+            // Condition 1 for NotYetBackedUp: The main backup root for the app is missing.
+            bool appSpecificBackupRootMissing = PathIssues.Any(pi =>
+                pi.Source == PathIssueSource.BackupLocation &&
+                pi.IssueType == PathIssueType.PathNotFound &&
+                !string.IsNullOrEmpty(AppBackupRootPath) &&
+                pi.PathSpec == AppBackupRootPath);
+
+            // Condition 2 for NotYetBackedUp: The app has configured paths (not an empty config).
+            // This checks if the initial PathIssue for "No path specifications provided" with PathSpec "N/A" for Application source exists.
+            bool appHasConfiguredPaths = !PathIssues.Any(pi =>
+                pi.Source == PathIssueSource.Application &&
+                pi.IssueType == PathIssueType.PathSpecNullOrEmpty &&
+                pi.PathSpec == "N/A");
+
+            // Condition 3 for NotYetBackedUp: No critical issues with the application's own source paths.
+            bool criticalAppSourcePathIssues = PathIssues.Any(pi =>
+                pi.Source == PathIssueSource.Application &&
+                (pi.IssueType == PathIssueType.PathSpecNullOrEmpty || // Check for individual null/empty paths
+                 pi.IssueType == PathIssueType.PathUnexpandable ||
+                 pi.IssueType == PathIssueType.PathInaccessible));
+
+            // Condition 4 for NotYetBackedUp: No general operation failures or file operation failures.
+            bool generalOrFileOpFailures = PathIssues.Any(pi => pi.IssueType == PathIssueType.OperationFailed) || HasFileOperationFailures;
+
+            if (appSpecificBackupRootMissing && appHasConfiguredPaths && !criticalAppSourcePathIssues && !generalOrFileOpFailures)
+            {
+                OverallStatus = SyncStatus.NotYetBackedUp;
+            }
+            // If not "NotYetBackedUp", then evaluate other statuses.
+            // HasCriticalPathIssues will correctly consider a missing backup root as critical if this isn't a "NotYetBackedUp" scenario.
+            else if (HasCriticalPathIssues || HasFileOperationFailures)
             {
                 OverallStatus = SyncStatus.Failed;
             }
@@ -187,6 +234,10 @@ namespace BackupWarden.Models
             }
             else
             {
+                // If it falls through, and NotYetBackedUp was set, it means there were other non-critical/non-warning issues.
+                // If NotYetBackedUp was set and it was the *only* issue (e.g. appSpecificBackupRootMissing was the only PathIssue),
+                // it would have been caught by the first 'if'.
+                // This 'else' is a fallback.
                 OverallStatus = SyncStatus.Unknown;
             }
         }
@@ -199,7 +250,7 @@ namespace BackupWarden.Models
             if (PathIssues.Any())
             {
                 var issuesBySource = PathIssues.GroupBy(i => i.Source);
-                foreach (var group in issuesBySource)
+                foreach (var group in issuesBySource.OrderBy(g => g.Key))
                 {
                     sb.Append($"• {group.Key.ToDisplayString()} Path Issues: {group.Count()}");
                     var topPathIssues = group
@@ -253,17 +304,31 @@ namespace BackupWarden.Models
             if (PathIssues.Any())
             {
                 sb.AppendLine("Path Issues:");
-                foreach (var issue in PathIssues.OrderBy(i => i.Source).ThenBy(i => i.IssueType)) // Optional: Order for consistency
+                foreach (var issue in PathIssues.OrderBy(i => i.Source).ThenBy(i => i.IssueType))
                 {
-                    sb.AppendLine($"  - {issue}"); // PathIssue.ToString() now includes the source
+                    sb.AppendLine($"  - {issue}");
                 }
             }
-            if (FileDifferences.Count != 0)
+            if (FileDifferences.Any())
             {
                 sb.AppendLine("File Differences:");
-                foreach (var diff in FileDifferences) sb.AppendLine($"  - {diff}");
+                foreach (var diff in FileDifferences.OrderBy(d => d.DifferenceType).ThenBy(d => d.RelativePath))
+                {
+                    sb.AppendLine($"  - {diff}");
+                }
             }
-            if (PathIssues.Count == 0 && FileDifferences.Count == 0)
+
+            // Special message for NotYetBackedUp if it's the primary state and no other significant issues.
+            if (OverallStatus == SyncStatus.NotYetBackedUp)
+            {
+                bool onlyAppRootMissingIssue = PathIssues.Count() == 1 && PathIssues.First().IssueType == PathIssueType.PathNotFound && PathIssues.First().Source == PathIssueSource.BackupLocation && PathIssues.First().PathSpec == AppBackupRootPath;
+                if (onlyAppRootMissingIssue && !FileDifferences.Any())
+                {
+                    sb.AppendLine("No backup performed for this application yet.");
+                }
+                // If there are other issues/differences, they will be listed above.
+            }
+            else if (PathIssues.Count == 0 && FileDifferences.Count == 0) // For other statuses like InSync
             {
                 sb.AppendLine("No issues or differences found.");
             }

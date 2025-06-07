@@ -19,6 +19,7 @@ namespace BackupWarden.Converters
                     SyncStatus.Syncing => (SolidColorBrush)Application.Current.Resources["SystemFillColorCautionBrush"],
                     SyncStatus.Failed => (SolidColorBrush)Application.Current.Resources["SystemFillColorCriticalBrush"],
                     SyncStatus.Warning => (SolidColorBrush)Application.Current.Resources["SystemFillColorCautionBrush"],
+                    SyncStatus.NotYetBackedUp => (SolidColorBrush)Application.Current.Resources["SystemFillColorCautionBrush"],
                     _ => (SolidColorBrush)Application.Current.Resources["SystemFillColorNeutralBrush"],
                 };
             }

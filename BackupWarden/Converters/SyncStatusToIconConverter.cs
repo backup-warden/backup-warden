@@ -18,6 +18,7 @@ namespace BackupWarden.Converters
                     SyncStatus.Syncing => "\uE895",     // Sync
                     SyncStatus.Failed => "\uEA39",      // Error
                     SyncStatus.Warning => "\uE7BA", // Warning
+                    SyncStatus.NotYetBackedUp => "\uE8A0", // Clock
                     _ => "\uE9CE",                      // Help/Unknown
                 };
             }
