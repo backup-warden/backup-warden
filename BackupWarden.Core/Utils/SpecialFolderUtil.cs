@@ -5,7 +5,7 @@ using System.Linq;
 
 namespace BackupWarden.Core.Utils
 {
-    public static partial class SpecialFolderUtil
+    public static class SpecialFolderUtil
     {
         private static readonly Dictionary<string, Func<string>> FolderResolvers = new(StringComparer.OrdinalIgnoreCase)
     {
