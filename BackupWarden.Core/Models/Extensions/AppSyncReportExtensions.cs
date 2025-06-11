@@ -1,9 +1,7 @@
 using System.Linq;
 using System.Text;
-using BackupWarden.Models;
-using BackupWarden.Models.Extensions; // For ModelEnumExtensions
 
-namespace BackupWarden.Models.Extensions
+namespace BackupWarden.Core.Models.Extensions
 {
     public static class AppSyncReportExtensions
     {
@@ -88,7 +86,7 @@ namespace BackupWarden.Models.Extensions
                 // For NotYetBackedUp, we expect the missing backup root issue and potentially "OnlyInApplication" file differences.
                 // If these are the *only* things, the specific message is good. Otherwise, the listed issues/diffs provide detail.
                 bool onlyExpectedElementsForNotYetBackedUp =
-                    report.PathIssues.All(pi => (pi.Source == PathIssueSource.BackupLocation && pi.IssueType == PathIssueType.PathNotFound && pi.PathSpec == report.AppBackupRootPath) || pi.Source == PathIssueSource.Application) &&
+                    report.PathIssues.All(pi => pi.Source == PathIssueSource.BackupLocation && pi.IssueType == PathIssueType.PathNotFound && pi.PathSpec == report.AppBackupRootPath || pi.Source == PathIssueSource.Application) &&
                     report.PathIssues.Any(pi => pi.Source == PathIssueSource.BackupLocation && pi.IssueType == PathIssueType.PathNotFound && pi.PathSpec == report.AppBackupRootPath) &&
                     report.FileDifferences.All(fd => fd.DifferenceType == FileDifferenceType.OnlyInApplication);
 
@@ -99,8 +97,8 @@ namespace BackupWarden.Models.Extensions
                     // If only the "NotYetBackedUp" condition is met (main backup folder missing)
                     // and any file differences are "OnlyInApplication", and any other path issues are non-critical app issues.
                     bool onlyMissingRootAndAppIssues = report.PathIssues.All(pi =>
-                        (pi.Source == PathIssueSource.BackupLocation && pi.IssueType == PathIssueType.PathNotFound && pi.PathSpec == report.AppBackupRootPath) ||
-                        (pi.Source == PathIssueSource.Application && (pi.IssueType == PathIssueType.PathIsEffectivelyEmpty || pi.IssueType == PathIssueType.PathNotFound))
+                        pi.Source == PathIssueSource.BackupLocation && pi.IssueType == PathIssueType.PathNotFound && pi.PathSpec == report.AppBackupRootPath ||
+                        pi.Source == PathIssueSource.Application && (pi.IssueType == PathIssueType.PathIsEffectivelyEmpty || pi.IssueType == PathIssueType.PathNotFound)
                     );
                     if (onlyMissingRootAndAppIssues && report.FileDifferences.All(fd => fd.DifferenceType == FileDifferenceType.OnlyInApplication))
                     {
@@ -120,7 +118,7 @@ namespace BackupWarden.Models.Extensions
         {
             bool appSourceIsFatallyFlawed() => report.PathIssues.Any(pi =>
                 pi.Source == PathIssueSource.Application &&
-                ((pi.IssueType == PathIssueType.PathSpecNullOrEmpty && pi.PathSpec == "N/A") ||
+                (pi.IssueType == PathIssueType.PathSpecNullOrEmpty && pi.PathSpec == "N/A" ||
                  pi.IssueType == PathIssueType.PathUnexpandable ||
                  pi.IssueType == PathIssueType.PathInaccessible));
 
@@ -156,8 +154,8 @@ namespace BackupWarden.Models.Extensions
                     bool onlyAppSourceFileDifferences = report.FileDifferences.All(fd => fd.DifferenceType == FileDifferenceType.OnlyInApplication);
 
                     bool pathIssuesAreConsistent = report.PathIssues.All(pi =>
-                        (pi.Source == PathIssueSource.BackupLocation && pi.IssueType == PathIssueType.PathNotFound && pi.PathSpec == report.AppBackupRootPath) ||
-                        (pi.Source == PathIssueSource.Application));
+                        pi.Source == PathIssueSource.BackupLocation && pi.IssueType == PathIssueType.PathNotFound && pi.PathSpec == report.AppBackupRootPath ||
+                        pi.Source == PathIssueSource.Application);
                     
                     // Check if the *specific* missing backup root issue is present, not just any backup location path not found.
                     bool hasTheMissingBackupRootIssue = report.PathIssues.Any(pi => pi.Source == PathIssueSource.BackupLocation && pi.IssueType == PathIssueType.PathNotFound && pi.PathSpec == report.AppBackupRootPath);
@@ -183,10 +181,10 @@ namespace BackupWarden.Models.Extensions
             // Data differences (OutOfSync) take precedence over warnings.
             bool hasWarningPathIssues = report.PathIssues.Any(pi =>
                 pi.IssueType == PathIssueType.PathIsEffectivelyEmpty ||
-                (pi.IssueType == PathIssueType.PathNotFound && pi.Source == PathIssueSource.Application) ||
-                (pi.IssueType == PathIssueType.PathNotFound && pi.Source == PathIssueSource.BackupLocation) || // PathNotFound for backup *other than root*
+                pi.IssueType == PathIssueType.PathNotFound && pi.Source == PathIssueSource.Application ||
+                pi.IssueType == PathIssueType.PathNotFound && pi.Source == PathIssueSource.BackupLocation || // PathNotFound for backup *other than root*
                 pi.IssueType == PathIssueType.OperationPrevented ||
-                (pi.IssueType == PathIssueType.PathInaccessible && pi.Source == PathIssueSource.BackupLocation));
+                pi.IssueType == PathIssueType.PathInaccessible && pi.Source == PathIssueSource.BackupLocation);
 
 
             if (hasWarningPathIssues)

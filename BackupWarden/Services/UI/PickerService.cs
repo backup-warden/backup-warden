@@ -2,25 +2,18 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading.Tasks;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
-
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.System.Com;
 using Windows.Win32.UI.Shell;
 using Windows.Win32.UI.Shell.Common;
+using BackupWarden.Core.Abstractions.Services.UI;
 
 namespace BackupWarden.Services.UI
 {
-    public interface IPickerService
-    {
-        Task<IReadOnlyList<string>> PickFilesAsync(IEnumerable<string> fileTypeFilters, bool allowMultiple = false);
-        Task<string?> PickFolderAsync();
-    }
-
     public class PickerService : IPickerService
     {
         public async Task<IReadOnlyList<string>> PickFilesAsync(IEnumerable<string> fileTypeFilters, bool allowMultiple = false)

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace BackupWarden.Services.Business
+namespace BackupWarden.Core.Abstractions.Services.Business
 {
     public interface IFileSystemOperations
     {

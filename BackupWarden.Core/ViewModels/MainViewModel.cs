@@ -1,7 +1,7 @@
-﻿using BackupWarden.Models;
-using BackupWarden.Services.Business;
-using BackupWarden.Services.UI;
-using BackupWarden.Utils;
+﻿using BackupWarden.Core.Abstractions.Services.Business;
+using BackupWarden.Core.Abstractions.Services.UI;
+using BackupWarden.Core.Models;
+using BackupWarden.Core.Utils;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -11,7 +11,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace BackupWarden.ViewModels
+namespace BackupWarden.Core.ViewModels
 {
     public partial class MainViewModel : ObservableObject
     {

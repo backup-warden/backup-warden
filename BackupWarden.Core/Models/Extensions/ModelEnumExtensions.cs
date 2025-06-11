@@ -1,6 +1,4 @@
-using BackupWarden.Models;
-
-namespace BackupWarden.Models.Extensions
+namespace BackupWarden.Core.Models.Extensions
 {
     public static class ModelEnumExtensions
     {

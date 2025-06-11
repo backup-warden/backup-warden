@@ -1,17 +1,10 @@
-﻿using Microsoft.UI.Xaml.Controls;
+﻿using BackupWarden.Core.Abstractions.Services.UI;
+using Microsoft.UI.Xaml.Controls;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace BackupWarden.Services.UI
 {
-    public interface IDialogService
-    {
-        Task ShowErrorAsync(string message, string? title = "Error");
-    }
-
     public class DialogService : IDialogService
     {
         public async Task ShowErrorAsync(string message, string? title = "Error")

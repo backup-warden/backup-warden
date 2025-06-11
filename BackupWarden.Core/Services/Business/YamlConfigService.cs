@@ -1,20 +1,11 @@
-﻿using BackupWarden.Models;
-using System;
-using System.Collections.Generic;
+﻿using BackupWarden.Core.Abstractions.Services.Business;
+using BackupWarden.Core.Models;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
-namespace BackupWarden.Services.Business
+namespace BackupWarden.Core.Services.Business
 {
-    public interface IYamlConfigService
-    {
-        BackupConfig LoadConfig(string path);
-    }
-
     public class YamlConfigService : IYamlConfigService
     {
         public BackupConfig LoadConfig(string path)

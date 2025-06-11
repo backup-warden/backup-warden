@@ -1,24 +1,16 @@
-﻿using BackupWarden.Models;
-using BackupWarden.Utils;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using BackupWarden.Models.Extensions;
+using BackupWarden.Core.Models.Extensions;
+using BackupWarden.Core.Models;
+using BackupWarden.Core.Utils;
+using BackupWarden.Core.Abstractions.Services.Business;
 
-namespace BackupWarden.Services.Business
+namespace BackupWarden.Core.Services.Business
 {
-    public delegate void AppStatusUpdateCallback(AppConfig app, SyncStatus status, string summaryReport, string detailedReport);
-
-    public interface IBackupSyncService
-    {
-        Task UpdateSyncStatusAsync(IEnumerable<AppConfig> apps, string backupRoot, AppStatusUpdateCallback? perAppStatusCallback = null);
-        Task RestoreAsync(IEnumerable<AppConfig> configs, string backupRoot, SyncMode mode, IProgress<int>? progress = null, AppStatusUpdateCallback? perAppStatusCallback = null);
-        Task BackupAsync(IEnumerable<AppConfig> configs, string backupRoot, SyncMode mode, IProgress<int>? progress = null, AppStatusUpdateCallback? perAppStatusCallback = null);
-    }
-
     public class BackupSyncService : IBackupSyncService
     {
         private readonly ILogger<BackupSyncService> _logger;
@@ -33,7 +25,7 @@ namespace BackupWarden.Services.Business
         private static bool AreFileTimesClose(DateTime t1, DateTime t2, TimeSpan? tolerance = null)
         {
             tolerance ??= TimeSpan.FromSeconds(2);
-            return (t1 > t2) ? (t1 - t2 <= tolerance) : (t2 - t1 <= tolerance);
+            return t1 > t2 ? t1 - t2 <= tolerance : t2 - t1 <= tolerance;
         }
 
         private (List<FileInfo> Files, List<PathIssue> Issues) ProcessSinglePathSpec(
@@ -492,7 +484,7 @@ namespace BackupWarden.Services.Business
                         bool criticalBackupSourceIssue = backupPathIssues.Any(pi =>
                             pi.IssueType == PathIssueType.PathSpecNullOrEmpty ||
                             pi.IssueType == PathIssueType.PathUnexpandable ||
-                            (pi.IssueType == PathIssueType.PathNotFound && pi.PathSpec == report.AppBackupRootPath) ||
+                            pi.IssueType == PathIssueType.PathNotFound && pi.PathSpec == report.AppBackupRootPath ||
                             pi.IssueType == PathIssueType.PathInaccessible);
 
                         if (criticalBackupSourceIssue && backupFiles.Count == 0)
@@ -524,7 +516,7 @@ namespace BackupWarden.Services.Business
                                 try
                                 {
                                     appFileDestPath = SpecialFolderUtil.ExpandSpecialFolders(relativePath);
-                                    if (string.IsNullOrWhiteSpace(appFileDestPath) || (!Path.IsPathRooted(appFileDestPath) && !appFileDestPath.Contains('%')))
+                                    if (string.IsNullOrWhiteSpace(appFileDestPath) || !Path.IsPathRooted(appFileDestPath) && !appFileDestPath.Contains('%'))
                                     {
                                         string errMsg = $"Could not reliably expand restore destination path for backup item '{relativePath}'.";
                                         _logger.LogWarning("Could not reliably expand restore destination path for backup item '{RelativePath}'. AppId: {AppId}", relativePath, currentApp.Id);
@@ -659,7 +651,7 @@ namespace BackupWarden.Services.Business
                             if (preserveLiveRelativePrefixes.Any(pfx => liveRelativePath.StartsWith(pfx, StringComparison.OrdinalIgnoreCase)))
                             {
                                 var matchingPrefix = preserveLiveRelativePrefixes.FirstOrDefault(pfx => liveRelativePath.StartsWith(pfx, StringComparison.OrdinalIgnoreCase));
-                                return matchingPrefix != null && (relPs.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar) == matchingPrefix;
+                                return matchingPrefix != null && relPs.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar == matchingPrefix;
                             }
                             return false;
                         }) ?? liveRelativePath;

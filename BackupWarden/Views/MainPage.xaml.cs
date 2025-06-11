@@ -1,5 +1,5 @@
-using BackupWarden.Models;
-using BackupWarden.ViewModels;
+using BackupWarden.Core.Models;
+using BackupWarden.Core.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 

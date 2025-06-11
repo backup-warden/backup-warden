@@ -1,8 +1,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
-using BackupWarden.Models;
 
-namespace BackupWarden.Models
+namespace BackupWarden.Core.Models
 {
     public partial class AppConfig : INotifyPropertyChanged
     {

@@ -1,8 +1,7 @@
+using BackupWarden.Core.Models.Extensions;
 using System.IO;
-using BackupWarden.Models.Extensions;
-using BackupWarden.Models;
 
-namespace BackupWarden.Models
+namespace BackupWarden.Core.Models
 {
     public class FileDifference
     {
