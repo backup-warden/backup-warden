@@ -1,18 +1,9 @@
-﻿using System.Collections.Generic;
-using System.Diagnostics;
+﻿using BackupWarden.Core.Abstractions.Services.Business;
+using System.Collections.Generic;
 using Windows.Storage;
 
 namespace BackupWarden.Services.Business
 {
-
-    public interface IAppSettingsService
-    {
-        void SaveYamlFilePaths(IEnumerable<string> paths);
-        List<string> LoadYamlFilePaths();
-        void SaveBackupFolder(string path);
-        string? LoadBackupFolder();
-    }
-
     public class AppSettingsService : IAppSettingsService
     {
         private const string YamlFilesKey = "YamlFilePaths";

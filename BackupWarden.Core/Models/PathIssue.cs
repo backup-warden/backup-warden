@@ -1,7 +1,6 @@
-using BackupWarden.Models.Extensions;
-using BackupWarden.Models;
+using BackupWarden.Core.Models.Extensions;
 
-namespace BackupWarden.Models
+namespace BackupWarden.Core.Models
 {
     public class PathIssue
     {

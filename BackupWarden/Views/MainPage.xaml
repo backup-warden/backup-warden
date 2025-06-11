@@ -7,8 +7,8 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:BackupWarden.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:models="using:BackupWarden.Models"
-    xmlns:viewmodels="using:BackupWarden.ViewModels"
+    xmlns:models="using:BackupWarden.Core.Models"
+    xmlns:viewmodels="using:BackupWarden.Core.ViewModels"
     x:Name="RootPage"
     DataContext="{x:Bind ViewModel}"
     mc:Ignorable="d">

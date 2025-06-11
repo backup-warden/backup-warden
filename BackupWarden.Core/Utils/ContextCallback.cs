@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Threading;
 
-namespace BackupWarden.Utils
+namespace BackupWarden.Core.Utils
 {
     public class ContextCallback<T1>
     {

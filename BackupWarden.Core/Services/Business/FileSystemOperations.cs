@@ -5,8 +5,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Microsoft.Extensions.Logging;
+using BackupWarden.Core.Abstractions.Services.Business;
 
-namespace BackupWarden.Services.Business
+namespace BackupWarden.Core.Services.Business
 {
     public class FileSystemOperations : IFileSystemOperations
     {

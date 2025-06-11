@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace BackupWarden.Models
+namespace BackupWarden.Core.Models
 {
     public class BackupConfig
     {

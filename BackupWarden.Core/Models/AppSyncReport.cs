@@ -1,7 +1,6 @@
 using System.Collections.Generic;
-using BackupWarden.Models;
 
-namespace BackupWarden.Models
+namespace BackupWarden.Core.Models
 {
     public class AppSyncReport
     {

@@ -2,9 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 
-namespace BackupWarden.Utils
+namespace BackupWarden.Core.Utils
 {
     public static partial class SpecialFolderUtil
     {

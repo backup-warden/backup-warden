@@ -1,4 +1,4 @@
-namespace BackupWarden.Models
+namespace BackupWarden.Core.Models
 {
     public enum SyncMode
     {

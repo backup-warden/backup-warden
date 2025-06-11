@@ -1,7 +1,4 @@
-using BackupWarden.ViewModels;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
-using System;
 using Windows.Graphics;
 using Microsoft.UI.Windowing;
 
