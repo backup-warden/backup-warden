@@ -38,9 +38,7 @@ namespace BackupWarden.Services.Business
 
         private (List<FileInfo> Files, List<PathIssue> Issues) ProcessSinglePathSpec(
             string pathSpec,
-            Func<string, string> getRelativePathFunc,
-            PathIssueSource issueSource,
-            string? baseDirectoryForRelativePath)
+            PathIssueSource issueSource)
         {
             var files = new List<FileInfo>();
             var issues = new List<PathIssue>();
@@ -140,7 +138,7 @@ namespace BackupWarden.Services.Business
 
             foreach (var pathSpec in pathSpecs)
             {
-                var (filesFromSpec, issuesFromSpec) = ProcessSinglePathSpec(pathSpec, getRelativePathFunc, issueSource, baseDirectoryForRelativePath);
+                var (filesFromSpec, issuesFromSpec) = ProcessSinglePathSpec(pathSpec, issueSource);
                 allIssues.AddRange(issuesFromSpec);
 
                 if (!issuesFromSpec.Any(i => i.IssueType == PathIssueType.PathSpecNullOrEmpty || i.IssueType == PathIssueType.PathUnexpandable))
