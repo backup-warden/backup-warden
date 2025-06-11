@@ -4,10 +4,10 @@
 	</assembly>-->
 	<!--<assembly fullname="YamlDotNet" preserve="all">
 	</assembly>-->
-	<assembly fullname="BackupWarden">
-		<type fullname="BackupWarden.Models.BackupConfig" preserve="all">
+	<assembly fullname="BackupWarden.Core">
+		<type fullname="BackupWarden.Core.Models.BackupConfig" preserve="all">
 		</type>
-		<type fullname="BackupWarden.Models.AppConfig" preserve="all">
+		<type fullname="BackupWarden.Core.Models.AppConfig" preserve="all">
 		</type>
 	</assembly>
 </linker>
