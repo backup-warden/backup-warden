@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 
 namespace BackupWarden.Core.ViewModels
 {
-    public partial class MainViewModel : ObservableObject
+    public class MainViewModel : ObservableObject
     {
         public ObservableCollection<string> YamlFilePaths { get; } = [];
         public ObservableCollection<AppConfig> LoadedApps { get; } = [];
