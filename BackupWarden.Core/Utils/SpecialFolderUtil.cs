@@ -28,11 +28,20 @@ namespace BackupWarden.Core.Utils
                 return path;
             }
 
-            foreach (var kvp in FolderResolvers.Where(w => path.Contains(w.Key, StringComparison.OrdinalIgnoreCase)))
+            // Split the path into segments based on directory separators
+            var segments = path.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.None);
+
+            // Resolve each segment that matches a special folder placeholder
+            for (int i = 0; i < segments.Length; i++)
             {
-                path = path.Replace(kvp.Key, kvp.Value(), StringComparison.OrdinalIgnoreCase);
+                if (FolderResolvers.TryGetValue(segments[i], out var resolver))
+                {
+                    segments[i] = resolver();
+                }
             }
-            return path;
+
+            // Combine the resolved segments into a single valid path
+            return Path.Combine(segments);
         }
 
         public static string ConvertToSpecialFolderPath(string fullPath)
@@ -42,31 +51,62 @@ namespace BackupWarden.Core.Utils
                 return fullPath;
             }
 
+            // Check if the path already starts with a known special folder placeholder
+            foreach (var placeholder in FolderResolvers.Keys)
+            {
+                if (fullPath.StartsWith(placeholder, StringComparison.OrdinalIgnoreCase))
+                {
+                    // If it's already a special path, return it as is,
+                    // potentially normalizing the directory separators if mixed.
+                    return fullPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+                }
+            }
+
             // Normalize path for comparison
-            fullPath = Path.GetFullPath(fullPath);
+            string normalizedFullPath;
+            try
+            {
+                normalizedFullPath = Path.GetFullPath(fullPath);
+            }
+            catch (ArgumentException)
+            {
+                // Path.GetFullPath can throw ArgumentException for invalid paths (e.g. "C::\foo")
+                // or paths that are just placeholders but not caught above (e.g. if a new placeholder was added but not handled)
+                // In such cases, or if it's a non-file system path (like a URL that GetFullPath might reject),
+                // return the original path.
+                return fullPath;
+            }
+
 
             // Try to match the path with any of the special folders
             var matchedEntries = FolderResolvers
                 .Select(kvp =>
                 {
                     var specialPath = kvp.Value();
+                    // Ensure specialPath is not null or empty before further processing
+                    if (string.IsNullOrEmpty(specialPath))
+                    {
+                        return null;
+                    }
+                    // Normalize specialPath as well to ensure consistent comparison
+                    var normalizedSpecialPath = Path.GetFullPath(specialPath);
                     return new
                     {
                         Placeholder = kvp.Key,
-                        Path = specialPath,
-                        PathLength = specialPath.Length,
-                        SeparatorCount = specialPath.Count(c => c == Path.DirectorySeparatorChar || c == Path.AltDirectorySeparatorChar)
+                        Path = normalizedSpecialPath,
+                        PathLength = normalizedSpecialPath.Length,
+                        SeparatorCount = normalizedSpecialPath.Count(c => c == Path.DirectorySeparatorChar || c == Path.AltDirectorySeparatorChar)
                     };
                 })
-                .Where(entry => !string.IsNullOrEmpty(entry.Path) && fullPath.StartsWith(entry.Path, StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(entry => entry.PathLength) // Primary sort: longest path first
-                .ThenByDescending(entry => entry.SeparatorCount) // Secondary sort: most separators first
+                .Where(entry => entry != null && !string.IsNullOrEmpty(entry.Path) && normalizedFullPath.StartsWith(entry.Path, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(entry => entry!.PathLength)
+                .ThenByDescending(entry => entry!.SeparatorCount)
                 .ToList();
 
-            if (matchedEntries.Count > 0)
+            if (matchedEntries?.Count > 0) // Updated to handle nullable matchedEntries
             {
                 var bestMatch = matchedEntries.First();
-                var relativePath = fullPath[bestMatch.PathLength..];
+                var relativePath = normalizedFullPath[bestMatch!.PathLength..];
 
                 // Ensure we have a path separator at the beginning of the relative path if needed
                 if (relativePath.Length > 0 && relativePath[0] != Path.DirectorySeparatorChar && relativePath[0] != Path.AltDirectorySeparatorChar)
@@ -74,16 +114,17 @@ namespace BackupWarden.Core.Utils
                     relativePath = Path.DirectorySeparatorChar + relativePath;
                 }
                 // Normalize to use Path.DirectorySeparatorChar for the appended part
-                else if (relativePath.Length > 0 && relativePath[0] == Path.AltDirectorySeparatorChar)
+                else if (relativePath.Length > 0 && (relativePath[0] == Path.AltDirectorySeparatorChar || relativePath[0] == Path.DirectorySeparatorChar))
                 {
-                    relativePath = Path.DirectorySeparatorChar + relativePath[1..];
+                    // Ensure it starts with the standard separator and remove any leading duplicate if it was already there
+                    relativePath = Path.DirectorySeparatorChar + relativePath.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 }
 
 
-                return bestMatch.Placeholder + relativePath;
+                return bestMatch.Placeholder + relativePath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
             }
 
-            return fullPath;
+            return normalizedFullPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
         }
     }
 }
