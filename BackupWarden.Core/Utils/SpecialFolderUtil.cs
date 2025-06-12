@@ -41,7 +41,18 @@ namespace BackupWarden.Core.Utils
             }
 
             // Combine the resolved segments into a single valid path
-            return Path.Combine(segments);
+            string combinedPath = Path.Combine(segments);
+
+            // Preserve trailing slash if present in the original path
+            bool originalPathEndsWithSeparator = path.EndsWith(Path.DirectorySeparatorChar.ToString()) || path.EndsWith(Path.AltDirectorySeparatorChar.ToString());
+            bool combinedPathEndsWithSeparator = combinedPath.EndsWith(Path.DirectorySeparatorChar.ToString()) || combinedPath.EndsWith(Path.AltDirectorySeparatorChar.ToString());
+
+            if (originalPathEndsWithSeparator && !combinedPathEndsWithSeparator)
+            {
+                return combinedPath + Path.DirectorySeparatorChar;
+            }
+
+            return combinedPath;
         }
 
         public static string ConvertToSpecialFolderPath(string fullPath)

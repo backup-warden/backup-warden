@@ -21,8 +21,9 @@
 - [ ] Implement a screen to configure the Yaml File in a Form
 - [ ] 
 - [ ] Recheck Sync status after running Backup and Restore(Keep any prevention errors)
-- [ ] Prevent key paths(folders or file) to be deleted on Sync
-- [ ] Show summary of Sync status
+- [x] Prevent key paths(folders or file) to be deleted on Sync
+- [x] Show summary of Sync status
 - [ ] Show popup with report of Sync status
-- [ ] Try to Refactor BackupSyncService to be more readable and maintainable
-- [ ] Issue not update the Summary at the end with success or fail
+- [x] Try to Refactor BackupSyncService to be more readable and maintainable
+- [x] Issue not update the Summary at the end with success or fail
+- [ ] Remove usage of Path.GetFullPath because it uses the file system
