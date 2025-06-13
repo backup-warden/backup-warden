@@ -48,7 +48,7 @@ jobs:
     #     restore-keys: |
     #       ${{ runner.os }}-nuget-
     - name: Restore dependencies
-      run: dotnet restore BackupWarden.sln --locked-mode /p:RuntimeIdentifier=win-x64 /p:PublishReadyToRun=true
+      run: dotnet restore BackupWarden.sln --locked-mode /p:PublishReadyToRun=true
 
     - name: Build solution
       run: dotnet build BackupWarden.sln -c Release -p:Platform=x64 --no-restore
