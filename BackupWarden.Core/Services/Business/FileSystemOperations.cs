@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using Microsoft.Extensions.Logging;
 using BackupWarden.Core.Abstractions.Services.Business;
+using System.IO.Abstractions;
 
 namespace BackupWarden.Core.Services.Business
 {
@@ -16,10 +17,12 @@ namespace BackupWarden.Core.Services.Business
             .WaitAndRetry(5, retryAttempt => TimeSpan.FromMilliseconds(500 * retryAttempt)); // Changed to synchronous retry
 
         private readonly ILogger<FileSystemOperations> _logger;
+        private readonly IFileSystem _fileSystem; 
 
-        public FileSystemOperations(ILogger<FileSystemOperations> logger)
+        public FileSystemOperations(ILogger<FileSystemOperations> logger, IFileSystem fileSystem)
         {
             _logger = logger;
+            _fileSystem = fileSystem;
         }
 
         public void CopyFile(string sourceFile, string destFile)
@@ -27,15 +30,15 @@ namespace BackupWarden.Core.Services.Business
             const int bufferSize = 81920; // 80KB
             _retryPolicy.Execute(() =>
             {
-                var destDir = Path.GetDirectoryName(destFile);
-                if (destDir != null && !Directory.Exists(destDir))
+                var destDir = _fileSystem.Path.GetDirectoryName(destFile);
+                if (destDir != null && !_fileSystem.Directory.Exists(destDir))
                 {
-                    Directory.CreateDirectory(destDir);
+                    _fileSystem.Directory.CreateDirectory(destDir);
                 }
 
-                using var sourceStream = new FileStream(sourceFile, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: false); // useAsync: false
-                using var destStream = new FileStream(destFile, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, useAsync: false); // useAsync: false
-                sourceStream.CopyTo(destStream); // Synchronous copy
+                using var sourceStream = _fileSystem.FileStream.New(sourceFile, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: false);
+                using var destStream = _fileSystem.FileStream.New(destFile, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, useAsync: false);
+                sourceStream.CopyTo(destStream);
             });
         }
 
@@ -43,7 +46,7 @@ namespace BackupWarden.Core.Services.Business
         {
             _retryPolicy.Execute(() =>
             {
-                File.Delete(filePath);
+                _fileSystem.File.Delete(filePath);
             });
         }
 
@@ -51,25 +54,25 @@ namespace BackupWarden.Core.Services.Business
         {
             _retryPolicy.Execute(() =>
             {
-                Directory.CreateDirectory(directoryPath);
+                _fileSystem.Directory.CreateDirectory(directoryPath);
             });
         }
 
         public void DeleteEmptyDirectories(string? rootDirectoryPath)
         {
-            if (string.IsNullOrEmpty(rootDirectoryPath) || !Directory.Exists(rootDirectoryPath)) return; // Added null/empty check
+            if (string.IsNullOrEmpty(rootDirectoryPath) || !_fileSystem.Directory.Exists(rootDirectoryPath)) return;
             try
             {
-                foreach (var dir in Directory.EnumerateDirectories(rootDirectoryPath, "*", SearchOption.AllDirectories)
+                foreach (var dir in _fileSystem.Directory.EnumerateDirectories(rootDirectoryPath, "*", SearchOption.AllDirectories)
                     .OrderByDescending(d => d.Length))
                 {
-                    if (!Directory.EnumerateFileSystemEntries(dir).Any())
+                    if (!_fileSystem.Directory.EnumerateFileSystemEntries(dir).Any())
                     {
                         try
                         {
                             _retryPolicy.Execute(() =>
                             {
-                                Directory.Delete(dir);
+                                _fileSystem.Directory.Delete(dir);
                                 _logger.LogInformation("Deleted empty directory {Directory}", dir);
                             });
                         }
@@ -92,29 +95,29 @@ namespace BackupWarden.Core.Services.Business
 
         public bool FileExists(string? filePath)
         {
-            return File.Exists(filePath);
+            return _fileSystem.File.Exists(filePath);
         }
 
         public bool DirectoryExists(string? directoryPath)
         {
-            return Directory.Exists(directoryPath);
+            return _fileSystem.Directory.Exists(directoryPath);
         }
 
-        public FileInfo GetFileInfo(string filePath)
+        public IFileInfo GetFileInfo(string filePath)
         {
-            return new FileInfo(filePath);
+            return _fileSystem.FileInfo.New(filePath);
         }
 
         public IEnumerable<string> EnumerateFiles(string path, string searchPattern, SearchOption searchOption)
         {
-            return Directory.EnumerateFiles(path, searchPattern, searchOption);
+            return _fileSystem.Directory.EnumerateFiles(path, searchPattern, searchOption);
         }
         
         public void SetLastWriteTimeUtc(string filePath, DateTime lastWriteTimeUtc)
         {
             _retryPolicy.Execute(() =>
             {
-                 File.SetLastWriteTimeUtc(filePath, lastWriteTimeUtc);
+                 _fileSystem.File.SetLastWriteTimeUtc(filePath, lastWriteTimeUtc);
             });
         }
     }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Abstractions;
 
 namespace BackupWarden.Core.Abstractions.Services.Business
 {
@@ -12,7 +13,7 @@ namespace BackupWarden.Core.Abstractions.Services.Business
         void DeleteEmptyDirectories(string? rootDirectoryPath);
         bool FileExists(string? filePath);
         bool DirectoryExists(string? directoryPath);
-        FileInfo GetFileInfo(string filePath);
+        IFileInfo GetFileInfo(string filePath);
         IEnumerable<string> EnumerateFiles(string path, string searchPattern, SearchOption searchOption);
         void SetLastWriteTimeUtc(string filePath, DateTime lastWriteTimeUtc);
     }
