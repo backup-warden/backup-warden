@@ -45,7 +45,7 @@ jobs:
       run: dotnet restore BackupWarden.sln
 
     - name: Build solution
-      run: dotnet build BackupWarden.sln --no-restore --configuration Release
+      run: msbuild BackupWarden.sln /p:Configuration=Release /p:Platform=x64 /p:RestorePackages=false
 
     - name: Run tests
       run: dotnet test BackupWarden.Tests/BackupWarden.Tests.csproj --no-build --configuration Release --logger "trx;LogFileName=test_results.trx" --collect:"XPlat Code Coverage"
