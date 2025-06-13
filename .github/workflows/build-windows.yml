@@ -29,8 +29,11 @@ jobs:
       with:
         dotnet-version: '8.0.x'
 
+    - name: Setup Visual Studio Build Tools
+      uses: microsoft/setup-msbuild@v2
+
     - name: Cache NuGet packages
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.nuget/packages
