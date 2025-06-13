@@ -31,7 +31,6 @@ jobs:
       with:
         dotnet-version: | 
             8.0.x
-            9.0.x
         cache: true
         cache-dependency-path: | 
             BackupWarden/packages.lock.json
@@ -48,13 +47,13 @@ jobs:
     #     restore-keys: |
     #       ${{ runner.os }}-nuget-
     - name: Restore dependencies
-      run: dotnet restore BackupWarden.sln --locked-mode -p:PublishReadyToRun=true
+      run: dotnet restore BackupWarden.sln --locked-mode
 
     - name: Build solution
-      run: dotnet build BackupWarden.sln -c Release -p:Platform=x64 --no-restore
+      run: dotnet build BackupWarden.sln -c Debug -p:Platform=x64 --no-restore
 
     - name: Run tests
-      run: dotnet test BackupWarden.Tests/BackupWarden.Tests.csproj --no-build --configuration Release --logger "trx;LogFileName=test_results.trx" --collect:"XPlat Code Coverage"
+      run: dotnet test BackupWarden.Tests/BackupWarden.Tests.csproj --no-build --configuration Debug --logger "trx;LogFileName=test_results.trx" --collect:"XPlat Code Coverage"
 
     - name: Publish test results
       id: publish_test_results_step
