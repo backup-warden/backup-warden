@@ -19,6 +19,8 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
 
     steps:
     - name: Checkout code
@@ -27,24 +29,25 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '8.0.x'
+        dotnet-version: | 
+            8.0.x
+            9.0.x
+        cache: true
 
     - name: Setup Visual Studio Build Tools
       uses: microsoft/setup-msbuild@v2
-      with:
-        vs-version: '17.0'
 
-    - name: Cache NuGet packages
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.nuget/packages
-          .nuget/packages
-        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.sln') }}
-        restore-keys: |
-          ${{ runner.os }}-nuget-
+    # - name: Cache NuGet packages
+    #   uses: actions/cache@v4
+    #   with:
+    #     path: |
+    #       ~/.nuget/packages
+    #       .nuget/packages
+    #     key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.sln') }}
+    #     restore-keys: |
+    #       ${{ runner.os }}-nuget-
     - name: Restore dependencies
-      run: dotnet restore BackupWarden.sln
+      run: dotnet restore BackupWarden.sln --locked-mode
 
     - name: Build solution
       run: msbuild BackupWarden.sln /p:Configuration=Release /p:Platform=x64 /p:RestorePackages=false
