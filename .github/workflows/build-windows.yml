@@ -38,9 +38,6 @@ jobs:
             BackupWarden.Core/packages.lock.json
             BackupWarden.Tests/packages.lock.json
 
-    - name: Setup Visual Studio Build Tools
-      uses: microsoft/setup-msbuild@v2
-
     # - name: Cache NuGet packages
     #   uses: actions/cache@v4
     #   with:
@@ -54,7 +51,7 @@ jobs:
       run: dotnet restore BackupWarden.sln --locked-mode
 
     - name: Build solution
-      run: msbuild BackupWarden.sln /p:Configuration=Release /p:Platform=x64 /p:RestorePackages=false
+      run: dotnet build BackupWarden.sln -c Release -p:Platform=x64 --no-restore
 
     - name: Run tests
       run: dotnet test BackupWarden.Tests/BackupWarden.Tests.csproj --no-build --configuration Release --logger "trx;LogFileName=test_results.trx" --collect:"XPlat Code Coverage"
