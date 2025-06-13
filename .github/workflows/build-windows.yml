@@ -33,6 +33,10 @@ jobs:
             8.0.x
             9.0.x
         cache: true
+        cache-dependency-path: | 
+            BackupWarden/packages.lock.json
+            BackupWarden.Core/packages.lock.json
+            BackupWarden.Tests/packages.lock.json
 
     - name: Setup Visual Studio Build Tools
       uses: microsoft/setup-msbuild@v2
