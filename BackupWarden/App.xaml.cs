@@ -13,6 +13,7 @@ using Microsoft.Windows.AppNotifications;
 using Microsoft.Windows.AppNotifications.Builder;
 using Serilog;
 using System;
+using System.IO.Abstractions;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -43,6 +44,7 @@ namespace BackupWarden
                     services.AddSingleton<IAppSettingsService, AppSettingsService>();
                     services.AddSingleton<IYamlConfigService, YamlConfigService>();
                     services.AddSingleton<IBackupSyncService, BackupSyncService>();
+                    services.AddSingleton<IFileSystem, FileSystem>();
                     services.AddSingleton<IFileSystemOperations, FileSystemOperations>();
 
                     services.AddSingleton<IDialogService, DialogService>();
