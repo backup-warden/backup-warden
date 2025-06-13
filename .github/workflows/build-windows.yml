@@ -31,6 +31,8 @@ jobs:
 
     - name: Setup Visual Studio Build Tools
       uses: microsoft/setup-msbuild@v2
+      with:
+        vs-version: '17.0'
 
     - name: Cache NuGet packages
       uses: actions/cache@v4
@@ -51,6 +53,7 @@ jobs:
       run: dotnet test BackupWarden.Tests/BackupWarden.Tests.csproj --no-build --configuration Release --logger "trx;LogFileName=test_results.trx" --collect:"XPlat Code Coverage"
 
     - name: Publish test results
+      id: publish_test_results_step
       uses: actions/upload-artifact@v4
       with:
         name: test-results
@@ -64,7 +67,7 @@ jobs:
         
     - name: Report Unit Tests
       uses: dorny/test-reporter@v1
-      if: always()
+      if: steps.publish_test_results_step.outcome == 'success' || steps.publish_test_results_step.outcome == 'failure'
       with:
         name: Unit Tests
         path: '**/TestResults/*.trx'
