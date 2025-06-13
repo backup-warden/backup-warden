@@ -8,6 +8,7 @@ using BackupWarden.Core.Models.Extensions;
 using BackupWarden.Core.Models;
 using BackupWarden.Core.Utils;
 using BackupWarden.Core.Abstractions.Services.Business;
+using System.IO.Abstractions;
 
 namespace BackupWarden.Core.Services.Business
 {
@@ -28,11 +29,11 @@ namespace BackupWarden.Core.Services.Business
             return t1 > t2 ? t1 - t2 <= tolerance : t2 - t1 <= tolerance;
         }
 
-        private (List<FileInfo> Files, List<PathIssue> Issues) ProcessSinglePathSpec(
+        private (List<IFileInfo> Files, List<PathIssue> Issues) ProcessSinglePathSpec(
             string pathSpec,
             PathIssueSource issueSource)
         {
-            var files = new List<FileInfo>();
+            var files = new List<IFileInfo>();
             var issues = new List<PathIssue>();
 
             if (string.IsNullOrWhiteSpace(pathSpec))
@@ -111,13 +112,13 @@ namespace BackupWarden.Core.Services.Business
             return (files, issues);
         }
 
-        private (Dictionary<string, FileInfo> FilesByRelativePath, List<PathIssue> Issues, bool IsEffectivelyEmptyOverall) GetPathContents(
+        private (Dictionary<string, IFileInfo> FilesByRelativePath, List<PathIssue> Issues, bool IsEffectivelyEmptyOverall) GetPathContents(
             IEnumerable<string> pathSpecs,
             Func<string, string> getRelativePathFunc,
             PathIssueSource issueSource,
             string? baseDirectoryForRelativePath = null)
         {
-            var fileDetailsByRelativePath = new Dictionary<string, FileInfo>(StringComparer.OrdinalIgnoreCase);
+            var fileDetailsByRelativePath = new Dictionary<string, IFileInfo>(StringComparer.OrdinalIgnoreCase);
             var allIssues = new List<PathIssue>();
             bool anyValidPathSpecEncountered = false;
             bool anyFilesFound = false;
@@ -579,7 +580,7 @@ namespace BackupWarden.Core.Services.Business
             });
         }
 
-        private static (HashSet<string> ProtectedPaths, List<string> ProtectedPrefixes) DetermineProtectedApplicationItemsForRestore(AppConfig app, Dictionary<string, FileInfo> backupFiles)
+        private static (HashSet<string> ProtectedPaths, List<string> ProtectedPrefixes) DetermineProtectedApplicationItemsForRestore(AppConfig app, Dictionary<string, IFileInfo> backupFiles)
         {
             var preserveLiveRelativePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var preserveLiveRelativePrefixes = new List<string>();
@@ -614,7 +615,7 @@ namespace BackupWarden.Core.Services.Business
             return (preserveLiveRelativePaths, preserveLiveRelativePrefixes);
         }
 
-        private void HandleRestoreSyncDeletion(AppSyncReport report, AppConfig app, Dictionary<string, FileInfo> backupFiles, HashSet<string> restoredRelativePaths)
+        private void HandleRestoreSyncDeletion(AppSyncReport report, AppConfig app, Dictionary<string, IFileInfo> backupFiles, HashSet<string> restoredRelativePaths)
         {
             var (preserveLiveRelativePaths, preserveLiveRelativePrefixes) = DetermineProtectedApplicationItemsForRestore(app, backupFiles);
 

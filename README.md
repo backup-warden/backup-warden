@@ -26,4 +26,3 @@
 - [ ] Show popup with report of Sync status
 - [x] Try to Refactor BackupSyncService to be more readable and maintainable
 - [x] Issue not update the Summary at the end with success or fail
-- [ ] Remove usage of Path.GetFullPath because it uses the file system
