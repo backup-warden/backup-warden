@@ -58,3 +58,41 @@ jobs:
       with:
         name: msix-package-x64
         path: AppPackages_x64/BackupWarden_*_x64_Test/BackupWarden_*_x64.msix
+
+    - name: Build and Package MSIX (x86)
+      shell: pwsh
+      run: |
+        msbuild BackupWarden/BackupWarden.csproj /restore /t:Build `
+          /p:Configuration=Release `
+          /p:Platform=x86 `
+          /p:GenerateAppxPackageOnBuild=true `
+          /p:AppxBundle=Never `
+          /p:UapAppxPackageBuildMode=Sideload `
+          /p:AppxPackageDir="$env:GITHUB_WORKSPACE/AppPackages_x86/" `
+          /p:AppxPackageSigningEnabled=true `
+          /p:PackageCertificateKeyFile="$env:PFX_PATH"
+
+    - name: Upload MSIX package (x86)
+      uses: actions/upload-artifact@v4
+      with:
+        name: msix-package-x86
+        path: AppPackages_x86/BackupWarden_*_x86_Test/BackupWarden_*_x86.msix
+
+    - name: Build and Package MSIX (ARM64)
+      shell: pwsh
+      run: |
+        msbuild BackupWarden/BackupWarden.csproj /restore /t:Build `
+          /p:Configuration=Release `
+          /p:Platform=arm64 `
+          /p:GenerateAppxPackageOnBuild=true `
+          /p:AppxBundle=Never `
+          /p:UapAppxPackageBuildMode=Sideload `
+          /p:AppxPackageDir="$env:GITHUB_WORKSPACE/AppPackages_arm64/" `
+          /p:AppxPackageSigningEnabled=true `
+          /p:PackageCertificateKeyFile="$env:PFX_PATH"
+
+    - name: Upload MSIX package (ARM64)
+      uses: actions/upload-artifact@v4
+      with:
+        name: msix-package-arm64
+        path: AppPackages_arm64/BackupWarden_*_arm64_Test/BackupWarden_*_arm64.msix
