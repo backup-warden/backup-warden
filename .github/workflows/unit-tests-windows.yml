@@ -36,10 +36,10 @@ jobs:
             BackupWarden.Tests/packages.lock.json
             
     - name: Restore dependencies
-      run: dotnet restore BackupWarden.Core/BackupWarden.Core.csproj --locked-mode
+      run: dotnet restore BackupWarden.Tests/BackupWarden.Tests.csproj --locked-mode
 
-    - name: Build solution
-      run: dotnet build BackupWarden.Core/BackupWarden.Core.csproj -c Debug --no-restore
+    - name: Build test project
+      run: dotnet build BackupWarden.Tests/BackupWarden.Tests.csproj -c Debug --no-restore
 
     - name: Run tests
       run: dotnet test BackupWarden.Tests/BackupWarden.Tests.csproj --no-build --configuration Debug --logger "trx;LogFileName=test_results.trx" --collect:"XPlat Code Coverage"
