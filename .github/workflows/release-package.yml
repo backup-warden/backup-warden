@@ -29,14 +29,7 @@ jobs:
       with:
         dotnet-version: | 
             8.0.x
-        cache: true
-        cache-dependency-path: | 
-            BackupWarden/packages.lock.json
-            BackupWarden.Core/packages.lock.json
-
-    - name: Restore dependencies
-      run: dotnet restore BackupWarden/BackupWarden.csproj --locked-mode
-
+            
     - name: Decode PFX Certificate
       shell: pwsh
       run: |
@@ -44,11 +37,24 @@ jobs:
         [System.IO.File]::WriteAllBytes($pfxPath, [System.Convert]::FromBase64String($env:SIGNING_CERTIFICATE_BASE64))
         echo "PFX_PATH=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-    - name: Publish MSIX package (x64)
-      run: dotnet publish BackupWarden/BackupWarden.csproj -c Release -p:Platform=x64 --no-restore -p:AppxPackageDir="AppPackages_x64/" -p:PackageCertificateKeyFile=$env:PFX_PATH
+    - name: Add msbuild to PATH
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Build and Package MSIX (x64)
+      shell: pwsh
+      run: |
+        msbuild BackupWarden/BackupWarden.csproj /restore /t:Build `
+          /p:Configuration=Release `
+          /p:Platform=x64 `
+          /p:GenerateAppxPackageOnBuild=true `
+          /p:AppxBundle=Never `
+          /p:UapAppxPackageBuildMode=Sideload `
+          /p:AppxPackageDir="$env:GITHUB_WORKSPACE/AppPackages_x64/" `
+          /p:AppxPackageSigningEnabled=true `
+          /p:PackageCertificateKeyFile="$env:PFX_PATH"
 
     - name: Upload MSIX package (x64)
       uses: actions/upload-artifact@v4
       with:
         name: msix-package-x64
-        path: BackupWarden/AppPackages_x64/**/*.msix
+        path: AppPackages_x64/BackupWarden_*_x64_Test/BackupWarden_*_x64.msix

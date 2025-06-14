@@ -16,7 +16,7 @@ permissions:
 
 
 jobs:
-  build:
+  unit-test:
     runs-on: windows-latest
     env:
       NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
@@ -39,10 +39,10 @@ jobs:
       run: dotnet restore BackupWarden.Tests/BackupWarden.Tests.csproj --locked-mode
 
     - name: Build test project
-      run: dotnet build BackupWarden.Tests/BackupWarden.Tests.csproj -c Debug --no-restore
+      run: dotnet build BackupWarden.Tests/BackupWarden.Tests.csproj -c Release --no-restore
 
     - name: Run tests
-      run: dotnet test BackupWarden.Tests/BackupWarden.Tests.csproj --no-build --configuration Debug --logger "trx;LogFileName=test_results.trx" --collect:"XPlat Code Coverage"
+      run: dotnet test BackupWarden.Tests/BackupWarden.Tests.csproj --no-build --configuration Release --logger "trx;LogFileName=test_results.trx" --collect:"XPlat Code Coverage"
 
     - name: Publish test results
       id: publish_test_results_step
