@@ -35,7 +35,7 @@ jobs:
             BackupWarden.Core/packages.lock.json
 
     - name: Restore dependencies
-      run: dotnet restore BackupWarden/BackupWarden.csproj
+      run: dotnet restore BackupWarden/BackupWarden.csproj --locked-mode
 
     - name: Decode PFX Certificate
       shell: pwsh
