@@ -1,0 +1,77 @@
+name: .NET Unit Tests
+  
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  checks: write
+
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: | 
+            8.0.x
+        cache: true
+        cache-dependency-path: | 
+            BackupWarden.Core/packages.lock.json
+            BackupWarden.Tests/packages.lock.json
+            
+    - name: Restore dependencies
+      run: dotnet restore BackupWarden.Tests/BackupWarden.Tests.csproj --locked-mode
+
+    - name: Build test project
+      run: dotnet build BackupWarden.Tests/BackupWarden.Tests.csproj -c Debug --no-restore
+
+    - name: Run tests
+      run: dotnet test BackupWarden.Tests/BackupWarden.Tests.csproj --no-build --configuration Debug --logger "trx;LogFileName=test_results.trx" --collect:"XPlat Code Coverage"
+
+    - name: Publish test results
+      id: publish_test_results_step
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: '**/TestResults/*.trx'
+
+    - name: Publish code coverage
+      uses: actions/upload-artifact@v4
+      with:
+        name: code-coverage
+        path: '**/coverage.cobertura.xml'
+        
+    - name: Report Unit Tests
+      uses: dorny/test-reporter@v1
+      if: steps.publish_test_results_step.outcome == 'success' || steps.publish_test_results_step.outcome == 'failure'
+      with:
+        name: Unit Tests
+        path: '**/TestResults/*.trx'
+        reporter: dotnet-trx
+
+    - name: Generate code coverage report
+      run: |
+        dotnet tool install --global dotnet-reportgenerator-globaltool
+        reportgenerator -reports:**/coverage.cobertura.xml -targetdir:coverage-report -reporttypes:Html
+
+    - name: Publish code coverage report
+      uses: actions/upload-artifact@v4
+      with:
+        name: code-coverage-report
+        path: coverage-report

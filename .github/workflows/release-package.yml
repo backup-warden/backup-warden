@@ -1,0 +1,54 @@
+name: .NET Release Package
+
+on:
+  workflow_run:
+    workflows: [".NET Unit Tests"]
+    types:
+      - completed 
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
+    env:
+      NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+      SIGNING_CERTIFICATE_BASE64: ${{ secrets.SIGNING_CERTIFICATE_BASE64 }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: | 
+            8.0.x
+        cache: true
+        cache-dependency-path: | 
+            BackupWarden/packages.lock.json
+            BackupWarden.Core/packages.lock.json
+
+    - name: Restore dependencies
+      run: dotnet restore BackupWarden/BackupWarden.csproj --locked-mode
+
+    - name: Decode PFX Certificate
+      shell: pwsh
+      run: |
+        $pfxPath = Join-Path $env:RUNNER_TEMP "signing_cert.pfx"
+        [System.IO.File]::WriteAllBytes($pfxPath, [System.Convert]::FromBase64String($env:SIGNING_CERTIFICATE_BASE64))
+        echo "PFX_PATH=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+    - name: Publish MSIX package (x64)
+      run: dotnet publish BackupWarden/BackupWarden.csproj -c Release -p:Platform=x64 --no-restore -p:AppxPackageDir="AppPackages_x64/" -p:PackageCertificateKeyFile=$env:PFX_PATH
+
+    - name: Upload MSIX package (x64)
+      uses: actions/upload-artifact@v4
+      with:
+        name: msix-package-x64
+        path: BackupWarden/AppPackages_x64/**/*.msix
