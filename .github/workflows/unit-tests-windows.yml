@@ -1,6 +1,5 @@
-name: .NET Build & Unit Tests
+name: .NET Unit Tests
   
-
 on:
   push:
     branches:
@@ -33,24 +32,14 @@ jobs:
             8.0.x
         cache: true
         cache-dependency-path: | 
-            BackupWarden/packages.lock.json
             BackupWarden.Core/packages.lock.json
             BackupWarden.Tests/packages.lock.json
-
-    # - name: Cache NuGet packages
-    #   uses: actions/cache@v4
-    #   with:
-    #     path: |
-    #       ~/.nuget/packages
-    #       .nuget/packages
-    #     key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.sln') }}
-    #     restore-keys: |
-    #       ${{ runner.os }}-nuget-
+            
     - name: Restore dependencies
-      run: dotnet restore BackupWarden.sln --locked-mode
+      run: dotnet restore BackupWarden.Core/BackupWarden.Core.csproj --locked-mode
 
     - name: Build solution
-      run: dotnet build BackupWarden.sln -c Debug -p:Platform=x64 --no-restore
+      run: dotnet build BackupWarden.Core/BackupWarden.Core.csproj -c Debug --no-restore
 
     - name: Run tests
       run: dotnet test BackupWarden.Tests/BackupWarden.Tests.csproj --no-build --configuration Debug --logger "trx;LogFileName=test_results.trx" --collect:"XPlat Code Coverage"

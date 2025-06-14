@@ -9,9 +9,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionItems", "SolutionIt
 	ProjectSection(SolutionItems) = preProject
 		.gitattributes = .gitattributes
 		.gitignore = .gitignore
-		.github\workflows\build-windows.yml = .github\workflows\build-windows.yml
 		LICENSE.txt = LICENSE.txt
 		README.md = README.md
+		.github\workflows\unit-tests-windows.yml = .github\workflows\unit-tests-windows.yml
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BackupWarden.Core", "BackupWarden.Core\BackupWarden.Core.csproj", "{77672136-8B7E-4417-B92E-0FFFFC0B001F}"
