@@ -1,21 +1,27 @@
 ﻿using Serilog;
 using Serilog.Events;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Windows.Storage;
 
 namespace BackupWarden.Logging
 {
     public static class SerilogConfigurator
     {
-        public static void Configure()
+        public static void Configure(bool isMsix)
         {
-            // Ensure the Logs directory exists in the LocalFolder
-            string logsDirectory = Path.Combine(ApplicationData.Current.LocalFolder.Path, "Logs");
+            string logsDirectory;
+
+            if (isMsix)
+            {
+                logsDirectory = Path.Combine(ApplicationData.Current.LocalFolder.Path, "Logs");
+            }
+            else
+            {
+                var localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                logsDirectory = Path.Combine(localAppDataPath, "BackupWarden", "Logs");
+            }
+            
             Directory.CreateDirectory(logsDirectory);
 
             string logFilePath = Path.Combine(logsDirectory, "log-.txt");

@@ -16,5 +16,7 @@ namespace BackupWarden.Core.Abstractions.Services.Business
         IFileInfo GetFileInfo(string filePath);
         IEnumerable<string> EnumerateFiles(string path, string searchPattern, SearchOption searchOption);
         void SetLastWriteTimeUtc(string filePath, DateTime lastWriteTimeUtc);
+        string ReadAllText(string filePath);
+        void WriteAllText(string filePath, string contents);
     }
 }

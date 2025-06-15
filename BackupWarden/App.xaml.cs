@@ -5,6 +5,7 @@ using BackupWarden.Core.ViewModels;
 using BackupWarden.Logging;
 using BackupWarden.Services.Business;
 using BackupWarden.Services.UI;
+using BackupWarden.Utils;
 using BackupWarden.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -33,15 +34,23 @@ namespace BackupWarden
         {
             InitializeComponent();
 
-            SerilogConfigurator.Configure();
+            var isMsix = RuntimeHelper.IsMSIX;
+
+            SerilogConfigurator.Configure(isMsix);
 
             _host = Host.CreateDefaultBuilder()
                 .UseContentRoot(AppContext.BaseDirectory)
                 .UseSerilog()
                 .ConfigureServices((context, services) =>
                 {
-                    // Register Business services
-                    services.AddSingleton<IAppSettingsService, AppSettingsService>();
+                    if (isMsix)
+                    {
+                        services.AddSingleton<IAppSettingsService, MsixAppSettingsService>();
+                    }
+                    else
+                    {
+                        services.AddSingleton<IAppSettingsService, UnpackedAppSettingsService>();
+                    }
                     services.AddSingleton<IYamlConfigService, YamlConfigService>();
                     services.AddSingleton<IBackupSyncService, BackupSyncService>();
                     services.AddSingleton<IFileSystem, FileSystem>();
@@ -52,7 +61,7 @@ namespace BackupWarden
 
                     // Register MainWindow and ViewModel
                     services.AddTransient<MainViewModel>();
-                    services.AddSingleton<MainPage>();
+                    services.AddTransient<MainPage>();
                 })
                 .Build();
 
@@ -65,15 +74,19 @@ namespace BackupWarden
         {
             e.Handled = true;
             Log.Error(e.Exception, "Unhandled exception");
-            var notification = new AppNotificationBuilder()
-                .AddText("An exception was thrown.")
-                .AddText($"Type: {e.Exception.GetType()}")
-                .AddText($"Message: {e.Message}\r\n" +
-                         $"HResult: {e.Exception.HResult}")
-                .BuildNotification();
 
-            //Show the notification
-            AppNotificationManager.Default.Show(notification);
+            if (RuntimeHelper.IsMSIX)
+            {
+                var notification = new AppNotificationBuilder()
+                    .AddText("An exception was thrown.")
+                    .AddText($"Type: {e.Exception.GetType()}")
+                    .AddText($"Message: {e.Message}\r\n" +
+                             $"HResult: {e.Exception.HResult}")
+                    .BuildNotification();
+
+                //Show the notification
+                AppNotificationManager.Default.Show(notification);
+            }
         }
 
         protected override void OnLaunched(LaunchActivatedEventArgs args)
