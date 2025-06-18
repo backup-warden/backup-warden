@@ -120,5 +120,15 @@ namespace BackupWarden.Core.Services.Business
                  _fileSystem.File.SetLastWriteTimeUtc(filePath, lastWriteTimeUtc);
             });
         }
+
+        public string ReadAllText(string filePath)
+        {
+            return _retryPolicy.Execute(() => _fileSystem.File.ReadAllText(filePath));
+        }
+
+        public void WriteAllText(string filePath, string contents)
+        {
+            _retryPolicy.Execute(() => _fileSystem.File.WriteAllText(filePath, contents));
+        }
     }
 }

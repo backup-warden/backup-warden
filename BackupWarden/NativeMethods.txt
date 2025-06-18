@@ -2,3 +2,4 @@
 SHCreateItemFromParsingName
 IFileOpenDialog
 FileOpenDialog
+GetCurrentPackageFullName
