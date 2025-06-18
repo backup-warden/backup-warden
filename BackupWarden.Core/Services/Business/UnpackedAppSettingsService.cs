@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace BackupWarden.Core.Services.Business
 {
@@ -14,7 +15,6 @@ namespace BackupWarden.Core.Services.Business
         private readonly AppSettings _settings;
         private readonly IFileSystemOperations _fileSystemOperations;
         private readonly ILogger<UnpackedAppSettingsService> _logger;
-        private static readonly JsonSerializerOptions jsonSerializerOptions = new() { WriteIndented = true };
 
         private const string SettingsFileName = "appsettings.json";
 
@@ -39,7 +39,7 @@ namespace BackupWarden.Core.Services.Business
                 if (_fileSystemOperations.FileExists(_settingsFilePath))
                 {
                     var json = _fileSystemOperations.ReadAllText(_settingsFilePath);
-                    var settings = JsonSerializer.Deserialize<AppSettings>(json);
+                    var settings = JsonSerializer.Deserialize(json, AppSettingsJsonContext.Default.AppSettings);
                     if (settings != null)
                     {
                         _logger.LogInformation("Successfully loaded settings from {FilePath}", _settingsFilePath);
@@ -63,7 +63,7 @@ namespace BackupWarden.Core.Services.Business
         {
             try
             {
-                var json = JsonSerializer.Serialize(_settings, jsonSerializerOptions);
+                var json = JsonSerializer.Serialize(_settings, AppSettingsJsonContext.Default.AppSettings);
                 _fileSystemOperations.WriteAllText(_settingsFilePath, json);
                 _logger.LogInformation("Successfully saved settings to {FilePath}", _settingsFilePath);
             }
@@ -99,10 +99,18 @@ namespace BackupWarden.Core.Services.Business
             SaveSettingsToFile();
         }
 
-        private class AppSettings
+        public class AppSettings
         {
             public List<string>? YamlFilePaths { get; set; } = [];
             public string? BackupFolder { get; set; }
         }
     }
+
+    [JsonSourceGenerationOptions(WriteIndented = true)]
+    [JsonSerializable(typeof(UnpackedAppSettingsService.AppSettings))]
+    internal partial class AppSettingsJsonContext : JsonSerializerContext
+    {
+    }
+
+
 }
