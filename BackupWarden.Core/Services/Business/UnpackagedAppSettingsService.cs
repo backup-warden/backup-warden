@@ -9,16 +9,16 @@ using System.Text.Json.Serialization;
 
 namespace BackupWarden.Core.Services.Business
 {
-    public class UnpackedAppSettingsService : IAppSettingsService
+    public class UnpackagedAppSettingsService : IAppSettingsService
     {
         private readonly string _settingsFilePath;
         private readonly AppSettings _settings;
         private readonly IFileSystemOperations _fileSystemOperations;
-        private readonly ILogger<UnpackedAppSettingsService> _logger;
+        private readonly ILogger<UnpackagedAppSettingsService> _logger;
 
         private const string SettingsFileName = "appsettings.json";
 
-        public UnpackedAppSettingsService(IFileSystemOperations fileSystemOperations, ILogger<UnpackedAppSettingsService> logger)
+        public UnpackagedAppSettingsService(IFileSystemOperations fileSystemOperations, ILogger<UnpackagedAppSettingsService> logger)
         {
             _fileSystemOperations = fileSystemOperations;
             _logger = logger;
@@ -81,7 +81,8 @@ namespace BackupWarden.Core.Services.Business
 
         public void SaveYamlFilePaths(IEnumerable<string> paths)
         {
-            _logger.LogInformation("Saving YamlFilePaths. Count: {Count}", paths.Count());
+            var count = paths.Count();
+            _logger.LogInformation("Saving YamlFilePaths. Count: {Count}", count);
             _settings.YamlFilePaths = [.. paths];
             SaveSettingsToFile();
         }
@@ -107,7 +108,7 @@ namespace BackupWarden.Core.Services.Business
     }
 
     [JsonSourceGenerationOptions(WriteIndented = true)]
-    [JsonSerializable(typeof(UnpackedAppSettingsService.AppSettings))]
+    [JsonSerializable(typeof(UnpackagedAppSettingsService.AppSettings))]
     internal partial class AppSettingsJsonContext : JsonSerializerContext
     {
     }

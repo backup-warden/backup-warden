@@ -49,7 +49,7 @@ namespace BackupWarden
                     }
                     else
                     {
-                        services.AddSingleton<IAppSettingsService, UnpackedAppSettingsService>();
+                        services.AddSingleton<IAppSettingsService, UnpackagedAppSettingsService>();
                     }
                     services.AddSingleton<IYamlConfigService, YamlConfigService>();
                     services.AddSingleton<IBackupSyncService, BackupSyncService>();
