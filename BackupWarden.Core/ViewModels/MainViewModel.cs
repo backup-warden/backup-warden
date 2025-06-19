@@ -138,7 +138,7 @@ namespace BackupWarden.Core.ViewModels
             LoadedApps.Clear();
             foreach (var config in YamlFilePaths
                 .Where(File.Exists)
-                .Select(_yamlConfigService.LoadConfig)
+                .Select(_yamlConfigService.Load)
                 .Where(cfg => cfg is not null))
             {
                 foreach (var app in config.Apps.Where(w => !string.IsNullOrWhiteSpace(w.Id) && w.Paths.Count > 0))

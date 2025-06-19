@@ -178,6 +178,11 @@
         "resolved": "9.0.0",
         "contentHash": "uksk86YlnzAdyfVNu3wICU0X5iXVe9LF7Q3UkngNliHWEvM5gvAlOUr+jmd9JwmbJWISH5+i1vyXE02lEVz7WQ=="
       },
+      "Vecc.YamlDotNet.Analyzers.StaticGenerator": {
+        "type": "Transitive",
+        "resolved": "16.3.0",
+        "contentHash": "sqG0i1keWeTVJIwFe2H5T4CdUa4E8dzw7PQ1QdYWMuGOWwFggb56UoexYpTDoc3zAVkZiBf5oCRETy+qP/wy+A=="
+      },
       "xunit.abstractions": {
         "type": "Transitive",
         "resolved": "2.0.3",
@@ -233,6 +238,7 @@
           "Serilog.Sinks.Debug": "[3.0.0, )",
           "Serilog.Sinks.File": "[7.0.0, )",
           "TestableIO.System.IO.Abstractions.Wrappers": "[22.0.14, )",
+          "Vecc.YamlDotNet.Analyzers.StaticGenerator": "[16.3.0, )",
           "YamlDotNet": "[16.3.0, )"
         }
       }

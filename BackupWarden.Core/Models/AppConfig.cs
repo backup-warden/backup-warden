@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.ComponentModel;
+using YamlDotNet.Serialization;
 
 namespace BackupWarden.Core.Models
 {
@@ -8,11 +9,9 @@ namespace BackupWarden.Core.Models
         public string Id { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public List<string> Paths { get; set; } = [];
-        public string? Key { get; set; }
-        public string? Account { get; set; }
-        public string? Mods { get; set; }
 
         private SyncStatus _syncStatus = SyncStatus.Unknown;
+        [YamlIgnore]
         public SyncStatus SyncStatus
         {
             get => _syncStatus;
@@ -26,9 +25,11 @@ namespace BackupWarden.Core.Models
             }
         }
 
+        [YamlIgnore]
         public AppSyncReport? LastSyncReport { get; set; }
 
         private string? _lastSyncReportSummary;
+        [YamlIgnore]
         public string? LastSyncReportSummary
         {
             get => _lastSyncReportSummary;
@@ -43,6 +44,7 @@ namespace BackupWarden.Core.Models
         }
 
         private string? _lastSyncReportDetail;
+        [YamlIgnore]
         public string? LastSyncReportDetail
         {
             get => _lastSyncReportDetail;

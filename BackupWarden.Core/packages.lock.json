@@ -60,6 +60,12 @@
           "Testably.Abstractions.FileSystem.Interface": "9.0.0"
         }
       },
+      "Vecc.YamlDotNet.Analyzers.StaticGenerator": {
+        "type": "Direct",
+        "requested": "[16.3.0, )",
+        "resolved": "16.3.0",
+        "contentHash": "sqG0i1keWeTVJIwFe2H5T4CdUa4E8dzw7PQ1QdYWMuGOWwFggb56UoexYpTDoc3zAVkZiBf5oCRETy+qP/wy+A=="
+      },
       "YamlDotNet": {
         "type": "Direct",
         "requested": "[16.3.0, )",
