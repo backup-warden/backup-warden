@@ -1,4 +1,5 @@
 ﻿using BackupWarden.Abstractions.Services.UI;
+using BackupWarden.Activation;
 using BackupWarden.Core.Abstractions.Services.Business;
 using BackupWarden.Core.Abstractions.Services.UI;
 using BackupWarden.Core.Services.Business;
@@ -55,6 +56,7 @@ namespace BackupWarden
                 .UseSerilog()
                 .ConfigureServices((context, services) =>
                 {
+                    services.AddTransient<ActivationHandler<LaunchActivatedEventArgs>, DefaultActivationHandler>();
                     if (isMsix)
                     {
                         services.AddSingleton<IAppSettingsService, MsixAppSettingsService>();
@@ -71,7 +73,7 @@ namespace BackupWarden
                     services.AddSingleton<IDialogService, DialogService>();
                     services.AddSingleton<IPickerService, PickerService>();
                     
-                    // Register Navigation services
+                    services.AddSingleton<IActivationService, ActivationService>();
                     services.AddSingleton<IPageService, PageService>();
                     services.AddSingleton<INavigationService, NavigationService>();
 
@@ -108,12 +110,9 @@ namespace BackupWarden
             }
         }
 
-        protected override void OnLaunched(LaunchActivatedEventArgs args)
+        protected async override void OnLaunched(LaunchActivatedEventArgs args)
         {
-            // Use ShellPage as the container for the app's content
-            var shellPage = _host.Services.GetRequiredService<ShellPage>();
-            MainWindow.Content = shellPage;
-            MainWindow.Activate();
+            await GetService<IActivationService>().ActivateAsync(args);
         }
     }
 }

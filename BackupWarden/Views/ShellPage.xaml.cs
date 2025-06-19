@@ -21,9 +21,6 @@ namespace BackupWarden.Views
             _navigationService = App.GetService<INavigationService>();
             _navigationService.Frame = ContentFrame;
             _navigationService.Navigated += OnNavigated;
-            
-            // Initialize with MainPage content
-            NavigateToMainPage();
         }
 
         private void OnNavigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
@@ -32,15 +29,6 @@ namespace BackupWarden.Views
             BackButton.Visibility = _navigationService.CanGoBack 
                 ? Visibility.Visible 
                 : Visibility.Collapsed;
-        }
-
-        public void NavigateToMainPage()
-        {
-            // Navigate to the main page using the navigation service
-            _navigationService.NavigateTo("MainPage", null, true);
-            
-            // When on main page, hide back button
-            BackButton.Visibility = Visibility.Collapsed;
         }
 
         private void BackButton_Click(object sender, RoutedEventArgs e)

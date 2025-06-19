@@ -21,11 +21,7 @@ namespace BackupWarden.Services.UI
         /// </summary>
         public PageService()
         {
-            // Configure the pages with their key mappings
-            Configure<MainPage>("MainPage");
-            
-            // Add more page configurations here as they are added to the app
-            // Configure<SettingsPage>("SettingsPage");
+            Configure<MainPage>();
         }
 
         /// <summary>
@@ -53,16 +49,17 @@ namespace BackupWarden.Services.UI
         /// </summary>
         /// <typeparam name="T">The type of the page</typeparam>
         /// <param name="key">The unique key for the page</param>
-        private void Configure<T>(string key) where T : Page
+        private void Configure<T>() where T : Page
         {
             lock (_pages)
             {
+                var type = typeof(T);
+                var key = type.Name;
                 if (_pages.ContainsKey(key))
                 {
                     throw new ArgumentException($"The key {key} is already configured in PageService");
                 }
 
-                var type = typeof(T);
                 if (_pages.Any(p => p.Value == type))
                 {
                     throw new ArgumentException($"This type is already configured with key {_pages.First(p => p.Value == type).Key}");
