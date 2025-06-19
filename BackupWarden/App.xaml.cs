@@ -1,4 +1,5 @@
-﻿using BackupWarden.Core.Abstractions.Services.Business;
+﻿using BackupWarden.Abstractions.Services.UI;
+using BackupWarden.Core.Abstractions.Services.Business;
 using BackupWarden.Core.Abstractions.Services.UI;
 using BackupWarden.Core.Services.Business;
 using BackupWarden.Core.ViewModels;
@@ -69,6 +70,10 @@ namespace BackupWarden
 
                     services.AddSingleton<IDialogService, DialogService>();
                     services.AddSingleton<IPickerService, PickerService>();
+                    
+                    // Register Navigation services
+                    services.AddSingleton<IPageService, PageService>();
+                    services.AddSingleton<INavigationService, NavigationService>();
 
                     // Register ViewModels
                     services.AddTransient<MainViewModel>();

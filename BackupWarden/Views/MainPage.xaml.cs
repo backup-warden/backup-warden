@@ -13,9 +13,10 @@ namespace BackupWarden.Views
     /// </summary>
     public sealed partial class MainPage : Page
     {
-        public MainPage(MainViewModel mainViewModel)
+        public MainPage()
         {
-            ViewModel = mainViewModel;
+            ViewModel = App.GetService<MainViewModel>();
+            DataContext = ViewModel;
             InitializeComponent();
         }
 

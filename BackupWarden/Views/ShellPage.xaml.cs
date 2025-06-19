@@ -1,3 +1,4 @@
+using BackupWarden.Abstractions.Services.UI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -11,32 +12,43 @@ namespace BackupWarden.Views
     /// </summary>
     public sealed partial class ShellPage : Page
     {
+        private readonly INavigationService _navigationService;
+
         public ShellPage()
         {
-            this.InitializeComponent();
-
+            InitializeComponent();
+            
+            _navigationService = App.GetService<INavigationService>();
+            _navigationService.Frame = ContentFrame;
+            _navigationService.Navigated += OnNavigated;
+            
             // Initialize with MainPage content
             NavigateToMainPage();
-            
-            // Initially hide the back button as we start with the MainPage
-            BackButton.Visibility = Visibility.Visible;
+        }
+
+        private void OnNavigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+        {
+            // Update back button visibility when navigation occurs
+            BackButton.Visibility = _navigationService.CanGoBack 
+                ? Visibility.Visible 
+                : Visibility.Collapsed;
         }
 
         public void NavigateToMainPage()
         {
-            // Get the MainPage from the DI container
-            var mainPage = App.GetService<MainPage>();
-            ContentFrame.Content = mainPage;
+            // Navigate to the main page using the navigation service
+            _navigationService.NavigateTo("MainPage", null, true);
             
-            // Hide back button when on main page
-            BackButton.Visibility = Visibility.Visible;
+            // When on main page, hide back button
+            BackButton.Visibility = Visibility.Collapsed;
         }
 
         private void BackButton_Click(object sender, RoutedEventArgs e)
         {
-            // For now, just navigate back to the MainPage
-            // This will be expanded when you implement more complex navigation
-            NavigateToMainPage();
+            if (_navigationService.CanGoBack)
+            {
+                _navigationService.GoBack();
+            }
         }
 
         private void SettingsButton_Click(object sender, RoutedEventArgs e)
