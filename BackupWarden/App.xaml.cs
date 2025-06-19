@@ -28,6 +28,17 @@ namespace BackupWarden
     {
         public static Window MainWindow { get; } = new MainWindow();
 
+        public static T GetService<T>()
+        where T : class
+        {
+            if ((Current as App)!._host.Services.GetService(typeof(T)) is not T service)
+            {
+                throw new ArgumentException($"{typeof(T)} needs to be registered in ConfigureServices within App.xaml.cs.");
+            }
+
+            return service;
+        }
+
         private readonly IHost _host;
 
         public App()
@@ -59,12 +70,15 @@ namespace BackupWarden
                     services.AddSingleton<IDialogService, DialogService>();
                     services.AddSingleton<IPickerService, PickerService>();
 
-                    // Register MainWindow and ViewModel
+                    // Register ViewModels
                     services.AddTransient<MainViewModel>();
+                    
+                    // Register Pages
                     services.AddTransient<MainPage>();
+                    services.AddTransient<ShellPage>();
                 })
                 .Build();
-
+            
             UnhandledException += App_UnhandledException;
 
             Log.Information("Application started");
@@ -91,8 +105,9 @@ namespace BackupWarden
 
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
-            var mainPage = _host.Services.GetRequiredService<MainPage>();
-            MainWindow.Content = mainPage;
+            // Use ShellPage as the container for the app's content
+            var shellPage = _host.Services.GetRequiredService<ShellPage>();
+            MainWindow.Content = shellPage;
             MainWindow.Activate();
         }
     }

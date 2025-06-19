@@ -48,6 +48,7 @@
                         x:Name="AddYamlButton"
                         Width="32"
                         Height="32"
+                        Padding="0"
                         Command="{x:Bind ViewModel.AddYamlFileCommand, Mode=OneWay}"
                         Style="{StaticResource AccentButtonStyle}">
                         <FontIcon FontSize="8" Glyph="&#xF8AA;" />
