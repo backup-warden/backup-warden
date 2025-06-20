@@ -1,7 +1,7 @@
 ﻿using BackupWarden.Abstractions.Services.UI;
+using BackupWarden.Core.Abstractions.ViewModels;
 using BackupWarden.Core.ViewModels;
 using BackupWarden.Views;
-using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.Generic;
@@ -36,12 +36,12 @@ namespace BackupWarden.Services.UI
         }
 
         private void Configure<VM, V>()
-            where VM : ObservableObject
+            where VM : BaseViewModel<VM>
             where V : Page
         {
             lock (_pages)
             {
-                var key = typeof(VM).FullName!;
+                var key = BaseViewModel<VM>.PageKey;
                 if (_pages.ContainsKey(key))
                 {
                     throw new ArgumentException($"The key {key} is already configured in PageService");

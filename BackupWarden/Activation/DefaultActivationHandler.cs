@@ -23,7 +23,7 @@ namespace BackupWarden.Activation
 
         protected async override Task HandleInternalAsync(LaunchActivatedEventArgs args)
         {
-            _navigationService.NavigateTo(typeof(MainViewModel).FullName!, args.Arguments);
+            _navigationService.NavigateTo(MainViewModel.PageKey, args.Arguments);
 
             await Task.CompletedTask;
         }

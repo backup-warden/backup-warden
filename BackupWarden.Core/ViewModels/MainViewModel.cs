@@ -3,7 +3,6 @@ using BackupWarden.Core.Abstractions.Services.UI;
 using BackupWarden.Core.Abstractions.ViewModels;
 using BackupWarden.Core.Models;
 using BackupWarden.Core.Utils;
-using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using System;
@@ -14,7 +13,7 @@ using System.Threading.Tasks;
 
 namespace BackupWarden.Core.ViewModels
 {
-    public class MainViewModel : ObservableObject, INavigationAware
+    public class MainViewModel : BaseViewModel<MainViewModel>, INavigationAware
     {
         public ObservableCollection<string> YamlFilePaths { get; } = [];
         public ObservableCollection<AppConfig> LoadedApps { get; } = [];
