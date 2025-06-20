@@ -1,5 +1,5 @@
 ﻿using BackupWarden.Abstractions.Services.UI;
-using BackupWarden.Core.Abstractions.Services.ViewModels;
+using BackupWarden.Core.Abstractions.ViewModels;
 using BackupWarden.Services.UI.Extensions;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;

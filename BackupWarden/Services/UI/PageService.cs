@@ -1,11 +1,11 @@
 ﻿using BackupWarden.Abstractions.Services.UI;
+using BackupWarden.Core.ViewModels;
 using BackupWarden.Views;
+using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BackupWarden.Services.UI
 {
@@ -16,20 +16,11 @@ namespace BackupWarden.Services.UI
     {
         private readonly Dictionary<string, Type> _pages = [];
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PageService"/> class.
-        /// </summary>
         public PageService()
         {
-            Configure<MainPage>();
+            Configure<MainViewModel, MainPage>();
         }
 
-        /// <summary>
-        /// Gets the page type for the specified key
-        /// </summary>
-        /// <param name="key">The key representing the page</param>
-        /// <returns>The type of the page</returns>
-        /// <exception cref="ArgumentException">Thrown when the specified key is not found</exception>
         public Type GetPageType(string key)
         {
             Type? pageType;
@@ -37,30 +28,27 @@ namespace BackupWarden.Services.UI
             {
                 if (!_pages.TryGetValue(key, out pageType))
                 {
-                    throw new ArgumentException($"Page not found: {key}. Did you forget to configure the page?");
+                    throw new ArgumentException($"Page not found: {key}. Did you forget to call PageService.Configure?");
                 }
             }
 
             return pageType;
         }
 
-        /// <summary>
-        /// Configures a page with its unique key
-        /// </summary>
-        /// <typeparam name="T">The type of the page</typeparam>
-        /// <param name="key">The unique key for the page</param>
-        private void Configure<T>() where T : Page
+        private void Configure<VM, V>()
+            where VM : ObservableObject
+            where V : Page
         {
             lock (_pages)
             {
-                var type = typeof(T);
-                var key = type.Name;
+                var key = typeof(VM).FullName!;
                 if (_pages.ContainsKey(key))
                 {
                     throw new ArgumentException($"The key {key} is already configured in PageService");
                 }
 
-                if (_pages.Any(p => p.Value == type))
+                var type = typeof(V);
+                if (_pages.ContainsValue(type))
                 {
                     throw new ArgumentException($"This type is already configured with key {_pages.First(p => p.Value == type).Key}");
                 }

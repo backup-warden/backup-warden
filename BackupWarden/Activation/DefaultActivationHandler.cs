@@ -1,4 +1,5 @@
 ﻿using BackupWarden.Abstractions.Services.UI;
+using BackupWarden.Core.ViewModels;
 using BackupWarden.Views;
 using Microsoft.UI.Xaml;
 using System.Threading.Tasks;
@@ -22,7 +23,7 @@ namespace BackupWarden.Activation
 
         protected async override Task HandleInternalAsync(LaunchActivatedEventArgs args)
         {
-            _navigationService.NavigateTo(nameof(MainPage), args.Arguments);
+            _navigationService.NavigateTo(typeof(MainViewModel).FullName!, args.Arguments);
 
             await Task.CompletedTask;
         }

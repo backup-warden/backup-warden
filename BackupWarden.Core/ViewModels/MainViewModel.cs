@@ -1,6 +1,6 @@
 ﻿using BackupWarden.Core.Abstractions.Services.Business;
 using BackupWarden.Core.Abstractions.Services.UI;
-using BackupWarden.Core.Abstractions.Services.ViewModels;
+using BackupWarden.Core.Abstractions.ViewModels;
 using BackupWarden.Core.Models;
 using BackupWarden.Core.Utils;
 using CommunityToolkit.Mvvm.ComponentModel;

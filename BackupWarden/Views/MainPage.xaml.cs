@@ -8,11 +8,10 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace BackupWarden.Views
 {
-    /// <summary>
-    /// An empty page that can be used on its own or navigated to within a Frame.
-    /// </summary>
-    public sealed partial class MainPage : Page
+    public sealed partial class MainPage
     {
+        public MainViewModel ViewModel { get; }
+
         public MainPage()
         {
             ViewModel = App.GetService<MainViewModel>();
@@ -20,7 +19,6 @@ namespace BackupWarden.Views
             InitializeComponent();
         }
 
-        public MainViewModel ViewModel { get; }
 
         private void SyncModeHelpButton_Click(object sender, RoutedEventArgs e)
         {
