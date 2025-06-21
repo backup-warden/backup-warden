@@ -1,4 +1,6 @@
-﻿using BackupWarden.Core.Abstractions.Services.Business;
+﻿using BackupWarden.Abstractions.Services.UI;
+using BackupWarden.Activation;
+using BackupWarden.Core.Abstractions.Services.Business;
 using BackupWarden.Core.Abstractions.Services.UI;
 using BackupWarden.Core.Services.Business;
 using BackupWarden.Core.ViewModels;
@@ -6,6 +8,7 @@ using BackupWarden.Logging;
 using BackupWarden.Services.Business;
 using BackupWarden.Services.UI;
 using BackupWarden.Utils;
+using BackupWarden.ViewModels;
 using BackupWarden.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -28,6 +31,17 @@ namespace BackupWarden
     {
         public static Window MainWindow { get; } = new MainWindow();
 
+        public static T GetService<T>()
+        where T : class
+        {
+            if ((Current as App)!._host.Services.GetService(typeof(T)) is not T service)
+            {
+                throw new ArgumentException($"{typeof(T)} needs to be registered in ConfigureServices within App.xaml.cs.");
+            }
+
+            return service;
+        }
+
         private readonly IHost _host;
 
         public App()
@@ -43,6 +57,7 @@ namespace BackupWarden
                 .UseSerilog()
                 .ConfigureServices((context, services) =>
                 {
+                    services.AddTransient<ActivationHandler<LaunchActivatedEventArgs>, DefaultActivationHandler>();
                     if (isMsix)
                     {
                         services.AddSingleton<IAppSettingsService, MsixAppSettingsService>();
@@ -58,13 +73,21 @@ namespace BackupWarden
 
                     services.AddSingleton<IDialogService, DialogService>();
                     services.AddSingleton<IPickerService, PickerService>();
+                    
+                    services.AddSingleton<IActivationService, ActivationService>();
+                    services.AddSingleton<IPageService, PageService>();
+                    services.AddSingleton<INavigationService, NavigationService>();
 
-                    // Register MainWindow and ViewModel
+                    // Register ViewModels
+                    services.AddTransient<ShellViewModel>();
                     services.AddTransient<MainViewModel>();
+                    
+                    // Register Pages
                     services.AddTransient<MainPage>();
+                    services.AddTransient<ShellPage>();
                 })
                 .Build();
-
+            
             UnhandledException += App_UnhandledException;
 
             Log.Information("Application started");
@@ -89,11 +112,9 @@ namespace BackupWarden
             }
         }
 
-        protected override void OnLaunched(LaunchActivatedEventArgs args)
+        protected async override void OnLaunched(LaunchActivatedEventArgs args)
         {
-            var mainPage = _host.Services.GetRequiredService<MainPage>();
-            MainWindow.Content = mainPage;
-            MainWindow.Activate();
+            await GetService<IActivationService>().ActivateAsync(args);
         }
     }
 }

@@ -3,7 +3,8 @@
     x:Class="BackupWarden.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:BackupWarden">
+    xmlns:local="using:BackupWarden"
+    xmlns:converters="using:BackupWarden.Converters">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -12,6 +13,10 @@
                 <!--  Other merged dictionaries here  -->
             </ResourceDictionary.MergedDictionaries>
             <!--  Other app resources here  -->
+            <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+            <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter" />
+            <converters:SyncStatusToIconConverter x:Key="SyncStatusToIconConverter" />
+            <converters:SyncStatusToColorConverter x:Key="SyncStatusToColorConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>
