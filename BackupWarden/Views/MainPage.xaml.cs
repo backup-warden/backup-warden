@@ -15,8 +15,8 @@ namespace BackupWarden.Views
         public MainPage()
         {
             ViewModel = App.GetService<MainViewModel>();
-            DataContext = ViewModel;
             InitializeComponent();
+            DataContext = ViewModel;
         }
 
 

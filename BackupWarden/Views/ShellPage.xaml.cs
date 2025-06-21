@@ -1,5 +1,4 @@
-using BackupWarden.Abstractions.Services.UI;
-using Microsoft.Extensions.DependencyInjection;
+using BackupWarden.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
@@ -12,31 +11,15 @@ namespace BackupWarden.Views
     /// </summary>
     public sealed partial class ShellPage : Page
     {
-        private readonly INavigationService _navigationService;
+        public ShellViewModel ViewModel { get; }
 
         public ShellPage()
         {
+            ViewModel = App.GetService<ShellViewModel>();
             InitializeComponent();
+            DataContext = ViewModel;
+            ViewModel.SetFrame(ContentFrame);
             
-            _navigationService = App.GetService<INavigationService>();
-            _navigationService.Frame = ContentFrame;
-            _navigationService.Navigated += OnNavigated;
-        }
-
-        private void OnNavigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
-        {
-            // Update back button visibility when navigation occurs
-            BackButton.Visibility = _navigationService.CanGoBack 
-                ? Visibility.Visible 
-                : Visibility.Collapsed;
-        }
-
-        private void BackButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (_navigationService.CanGoBack)
-            {
-                _navigationService.GoBack();
-            }
         }
 
         private void SettingsButton_Click(object sender, RoutedEventArgs e)

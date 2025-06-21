@@ -6,6 +6,8 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:BackupWarden.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:viewmodels="using:BackupWarden.ViewModels"
+    d:DataContext="{d:DesignInstance Type=viewmodels:ShellViewModel}"
     mc:Ignorable="d">
     <Grid>
         <Grid.RowDefinitions>
@@ -28,7 +30,7 @@
                 Margin="4,4,0,0"
                 Padding="0"
                 VerticalAlignment="Center"
-                Click="BackButton_Click"
+                Command="{x:Bind ViewModel.GoBackCommand}"
                 Style="{StaticResource SubtleButtonStyle}"
                 ToolTipService.ToolTip="Back">
                 <FontIcon FontSize="12" Glyph="&#xE72B;" />

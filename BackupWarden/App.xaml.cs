@@ -8,6 +8,7 @@ using BackupWarden.Logging;
 using BackupWarden.Services.Business;
 using BackupWarden.Services.UI;
 using BackupWarden.Utils;
+using BackupWarden.ViewModels;
 using BackupWarden.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -78,6 +79,7 @@ namespace BackupWarden
                     services.AddSingleton<INavigationService, NavigationService>();
 
                     // Register ViewModels
+                    services.AddTransient<ShellViewModel>();
                     services.AddTransient<MainViewModel>();
                     
                     // Register Pages
